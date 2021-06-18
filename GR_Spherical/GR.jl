@@ -249,16 +249,16 @@ function init(::Type{T}, grid::Grid, param) where {T}
 
     r0 = 10
     σr = 0.5
-    Amp = 0.1
+    Amp = 0.05
 
     f𝜙(rt) = Amp*(1/r(rt))*exp(-(1/2)*((r(rt)-r0)/σr)^2)
     f∂𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r(rt)*r0-r(rt)^2-σr^2)/(r(rt)^2*σr^2)
-    f∂t𝜙(rt) = 0.
+    f∂t𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r0-r(rt))/(r(rt)*σr^2)
 
-    f∂χ(rt) = 0.
+    #f∂χ(rt) = 0.
     f∂γtrr(rt) = -2*M/(r(rt)^2)
     f∂γtθθ(rt) = 2*r(rt)
-    f∂Arr(rt) = (4*M/3)*(15*M^2+15*M*r(rt)+4*r(rt)^2)/real(((r(rt)^7)*((r(rt)+2*M)^3)+0im)^(1/2))
+    #f∂Arr(rt) = (4*M/3)*(15*M^2+15*M*r(rt)+4*r(rt)^2)/real(((r(rt)^7)*((r(rt)+2*M)^3)+0im)^(1/2))
     f∂K(rt) = -2*M*(9*M^2+10*M*r(rt)+2*r(rt)^2)/real((r(rt)*(r(rt)+2*M)+0im)^(5/2))
     f∂Γr(rt) = 2*(r(rt)+3*M)/(r(rt)+2*M)^3
 
@@ -315,11 +315,11 @@ function init(::Type{T}, grid::Grid, param) where {T}
     ∂𝜙 = sample(T, grid, f∂𝜙)
     ∂t𝜙 = sample(T, grid, f∂t𝜙)
 
-    ∂χ = sample(T, grid, f∂χ)
+    ∂χ = sample(T, grid, rt->0)
     # ∂γtrr = sample(T, grid, f∂γtrr)
     # ∂γtθθ = sample(T, grid, f∂γtθθ)
     # ∂K = sample(T, grid, f∂K)
-    ∂Arr = sample(T, grid, f∂Arr)
+    ∂Arr = sample(T, grid, rt->(4*M/3)*(15*M^2+15*M*r(rt)+4*r(rt)^2)/real(((r(rt)^7)*((r(rt)+2*M)^3)+0im)^(1/2)))
 
     # ∂2γtθθ = sample(T, grid, f∂2γtθθ)
     #
@@ -364,101 +364,63 @@ function init(::Type{T}, grid::Grid, param) where {T}
 
     # Constraint Equations
 
-    rt = domain.xmin - drt
+    rt = sample(T, grid, rt->rt)
     r = param[4]
 
-    for i = 2:n-1
+    for i = n-1:-1:2
 
-        ∂χ[i] = f∂χ(rt,(χ[i], X[i], Arr[i]))
-        ∂X[i] = f∂X(rt,(χ[i], X[i], Arr[i]))
-        ∂Arr[i] = f∂Arr(rt,(χ[i], X[i], Arr[i]))
+        ∂χ[i] = f∂χ(rt[i],(χ[i], X[i], Arr[i]))
+        ∂X[i] = f∂X(rt[i],(χ[i], X[i], Arr[i]))
+        ∂Arr[i] = f∂Arr(rt[i],(χ[i], X[i], Arr[i]))
 
-        χ[i+1] = χ[i] + drt*(3*∂χ[i]-∂χ[i-1])/2
-        X[i+1] = X[i] + drt*(3*∂X[i]-∂X[i-1])/2
-        Arr[i+1] = Arr[i] + drt*(3*∂Arr[i]-∂Arr[i-1])/2
+        # χ[i-1] = χ[i] - drt*(3*∂χ[i]-∂χ[i+1])/2
+        # X[i-1] = X[i] - drt*(3*∂X[i]-∂X[i+1])/2
+        # Arr[i-1] = Arr[i] - drt*(3*∂Arr[i]-∂Arr[i+1])/2
 
-        # k2χ = f∂χ(rt+drt/2,(χ[i]+drt*k1χ/2,X[i]+drt*k1X/2,Arr[i]+drt*k1Arr/2))
-        # k2X = f∂X(rt+drt/2,(χ[i]+drt*k1χ/2,X[i]+drt*k1X/2,Arr[i]+drt*k1Arr/2))
-        # k2Arr = f∂Arr(rt+drt/2,(χ[i]+drt*k1χ/2,X[i]+drt*k1X/2,Arr[i]+drt*k1Arr/2))
+        χ[i-1] = χ[i] - drt*∂χ[i]
+        X[i-1] = X[i] - drt*∂X[i]
+        Arr[i-1] = Arr[i] - drt*∂Arr[i]
+
+        # k1χ = f∂χ(rt[i],(χ[i], X[i], Arr[i]))
+        # k1X = f∂X(rt[i],(χ[i], X[i], Arr[i]))
+        # k1Arr = f∂Arr(rt[i],(χ[i], X[i], Arr[i]))
         #
-        # k3χ = f∂χ(rt+drt/2,(χ[i]+drt*k2χ/2,X[i]+drt*k2X/2,Arr[i]+drt*k2Arr/2))
-        # k3X = f∂X(rt+drt/2,(χ[i]+drt*k2χ/2,X[i]+drt*k2X/2,Arr[i]+drt*k2Arr/2))
-        # k3Arr = f∂Arr(rt+drt/2,(χ[i]+drt*k2χ/2,X[i]+drt*k2X/2,Arr[i]+drt*k2Arr/2))
+        # k2χ = f∂χ(rt[i]+drt/2,(χ[i]+drt*k1χ/2,X[i]+drt*k1X/2,Arr[i]+drt*k1Arr/2))
+        # k2X = f∂X(rt[i]+drt/2,(χ[i]+drt*k1χ/2,X[i]+drt*k1X/2,Arr[i]+drt*k1Arr/2))
+        # k2Arr = f∂Arr(rt[i]+drt/2,(χ[i]+drt*k1χ/2,X[i]+drt*k1X/2,Arr[i]+drt*k1Arr/2))
         #
-        # k4χ = f∂χ(rt+drt,(χ[i]+drt*k3χ,X[i]+drt*k3X,Arr[i]+drt*k3Arr))
-        # k4X = f∂X(rt+drt,(χ[i]+drt*k3χ,X[i]+drt*k3X,Arr[i]+drt*k3Arr))
-        # k4Arr = f∂Arr(rt+drt,(χ[i]+drt*k3χ,X[i]+drt*k3X,Arr[i]+drt*k3Arr))
-
+        # k3χ = f∂χ(rt[i]+drt/2,(χ[i]+drt*k2χ/2,X[i]+drt*k2X/2,Arr[i]+drt*k2Arr/2))
+        # k3X = f∂X(rt[i]+drt/2,(χ[i]+drt*k2χ/2,X[i]+drt*k2X/2,Arr[i]+drt*k2Arr/2))
+        # k3Arr = f∂Arr(rt[i]+drt/2,(χ[i]+drt*k2χ/2,X[i]+drt*k2X/2,Arr[i]+drt*k2Arr/2))
+        #
+        # k4χ = f∂χ(rt[i+1],(χ[i]+drt*k3χ,X[i]+drt*k3X,Arr[i]+drt*k3Arr))
+        # k4X = f∂X(rt[i+1],(χ[i]+drt*k3χ,X[i]+drt*k3X,Arr[i]+drt*k3Arr))
+        # k4Arr = f∂Arr(rt[i+1],(χ[i]+drt*k3χ,X[i]+drt*k3X,Arr[i]+drt*k3Arr))
+        #
         # χ[i+1] = χ[i] + drt*(k1χ + 2*k2χ + 2*k3χ + k4χ)/6
         # X[i+1] = X[i] + drt*(k1X + 2*k2X + 2*k3X + k4X)/6
         # Arr[i+1] = Arr[i] + drt*(k1Arr + 2*k2Arr + 2*k3Arr + k4Arr)/6
 
-        # Arrreg[i] = real((r(rt)+ 0im)^(5/2))*Arr[i]
-        # k1Arrreg = real((r(rt)+ 0im)^(5/2))*k1Arr + (5/2)*real((r(rt)+ 0im)^(3/2))*Arr[i]
-        # k2Arrreg = real((r(rt+drt/2)+ 0im)^(5/2))*k2Arr + (5/2)*real((r(rt+drt/2)+ 0im)^(3/2))*(Arr[i]+drt*k1Arr/2)
-        # k3Arrreg = real((r(rt+drt/2)+ 0im)^(5/2))*k3Arr + (5/2)*real((r(rt+drt/2)+ 0im)^(3/2))*(Arr[i]+drt*k2Arr/2)
-        # k4Arrreg = real((r(rt+drt)+ 0im)^(5/2))*k4Arr + (5/2)*real((r(rt+drt)+ 0im)^(3/2))*(Arr[i]+drt*k3Arr)
-        #
-        # Arrreg[i+1] = Arrreg[i] + drt*(k1Arrreg + 2*k2Arrreg + 2*k3Arrreg + k4Arrreg)/6
-        #
-        # Arr[i+1] = real((r(rt+drt)+ 0im)^(-5/2))*Arrreg[i+1]
-        #
-        #Arr[i+1] = Arr[i] + drt*(k1Arr + 2*k2Arr + 2*k3Arr + k4Arr)/6
-        #
-        # Arrreg[i+1] = real((r(rt+drt)+ 0im)^(5/2))*Arr[i+1]
-
-        # grr[i] = χ[i]/γtrr[i] - (βr[i]/α[i])^2
-        # gθθ[i] = χ[i]/γtθθ[i]
-        #
-        # 𝓛[i] = ((1/2)*gtt[i]*∂t𝜙[i]^2 + (1/2)*grr[i]*∂𝜙[i]^2
-        # + gtr[i]*∂𝜙[i]*∂t𝜙[i] - (1/2)*(m^2)*𝜙[i]^2)
-        #
-        # Ttt[i] = (gtt[i]*∂t𝜙[i] + gtr[i]*∂𝜙[i])^2 - gtt[i]*𝓛[i]
-        # Ttr[i] = ((gtt[i]*∂t𝜙[i] + gtr[i]*∂𝜙[i])*(gtr[i]*∂t𝜙[i] + grr[i]*∂𝜙[i])
-        # - gtr[i]*𝓛[i])
-        #
-        # ρ[i] = (α[i]^2)*Ttt[i]
-        # Sr[i] = α[i]*Ttr[i]
-        #
-        # ∂χ[i] = X[i]
-        #
-        # ∂X[i] = -(1/2)*γtrr[i]*(-(3/2)*(Arr[i]/γtrr[i])^2 + (2/3)*K[i]^2
-        #  - (5/2)*((X[i]^2)/χ[i])/γtrr[i]
-        #  + 2*χ[i]/γtθθ[i] - 2*χ[i]*(∂2γtθθ[i]/γtθθ[i])/γtrr[i]
-        #  + 2*X[i]*(∂γtθθ[i]/γtθθ[i])/γtrr[i]
-        #  + χ[i]*(∂γtrr[i]/(γtrr[i]^2))*(∂γtθθ[i]/γtθθ[i])
-        #  - X[i]*∂γtrr[i]/(γtrr[i]^2)
-        #  + (1/2)*χ[i]*((∂γtθθ[i]/γtθθ[i])^2)/γtrr[i] - 16*pi*ρ[i])
-        #
-        # ∂Arr[i] = -γtrr[i]*(-(2/3)*∂K[i] - (3/2)*Arr[i]*(X[i]/χ[i])/γtrr[i]
-        #  + (3/2)*Arr[i]*(∂γtθθ[i]/γtθθ[i])/γtrr[i] - Arr[i]*∂γtrr[i]/(γtrr[i]^2)
-        #  - 8*pi*γtrr[i]*Sr[i]/χ[i])
-        #
-        # χ[i+1] = χ[i] + dr*(3*∂χ[i]-∂χ[i-1])/2
-        # X[i+1] = X[i] + dr*(3*∂X[i]-∂X[i-1])/2
-
         tol = 1.
         atol = eps(T)^(T(3) / 4)
 
+        i -= 1
+
         while true
 
-            initχ = χ[i+1]
-            initX = X[i+1]
-            initArr = Arr[i+1]
+            initχ = χ[i]
+            initX = X[i]
+            initArr = Arr[i]
 
-            #Arr[i+1] = real((r(rt+drt)+ 0im)^(-5/2))*Arrreg[i+1]
+            ∂χ[i] = f∂χ(rt[i],(χ[i],X[i],Arr[i]))
+            ∂X[i] = f∂X(rt[i],(χ[i],X[i],Arr[i]))
+            ∂Arr[i] = f∂Arr(rt[i],(χ[i],X[i],Arr[i]))
 
-            ∂χ[i+1] = f∂χ(rt+drt,(χ[i+1],X[i+1],Arr[i+1]))
-            ∂X[i+1] = f∂X(rt+drt,(χ[i+1],X[i+1],Arr[i+1]))
-            ∂Arr[i+1] = f∂Arr(rt+drt,(χ[i+1],X[i+1],Arr[i+1]))
+            χ[i] = χ[i+1] - drt*(∂χ[i+1] + ∂χ[i])/2
+            X[i] = X[i+1] - drt*(∂X[i+1] + ∂X[i])/2
+            Arr[i] = Arr[i+1] - drt*(∂Arr[i+1] + ∂Arr[i])/2
 
-            #∂Arrreg[i+1] = real((r(rt+drt)+ 0im)^(5/2))*∂Arr[i+1] + (5/2)*real((r(rt+drt)+ 0im)^(3/2))*Arr[i+1]
-
-            χ[i+1] = χ[i] + drt*(∂χ[i] + ∂χ[i+1])/2
-            X[i+1] = X[i] + drt*(∂X[i] + ∂X[i+1])/2
-            Arr[i+1] = Arr[i] + drt*(∂Arr[i] + ∂Arr[i+1])/2
-
-            global tol = maximum(abs.((initχ-χ[i+1],initX-X[i+1],initArr-Arr[i+1])))
+            global tol = maximum(abs.((initχ-χ[i],initX-X[i],initArr-Arr[i])))
 
             if tol < atol
                 break
@@ -466,7 +428,7 @@ function init(::Type{T}, grid::Grid, param) where {T}
 
         end
 
-        rt += drt
+        i += 1
 
      end
 
@@ -520,31 +482,33 @@ function init(::Type{T}, grid::Grid, param) where {T}
 
     Arrreg = real((rr.+0im).^(5/2)).*Arr
 
-    α = sample(T, grid, fα)
-    A = sample(T, grid, fA)
-    βr = sample(T, grid, fβr)
-    Br = sample(T, grid, fBr)
-    χ = sample(T, grid, fχ)
-    γtrr = sample(T, grid, fγtrr)
-    γtθθ = sample(T, grid, fγtθθ)
-    Arr = sample(T, grid, fArr)
-    K = sample(T, grid, fK)
-    Γr = sample(T, grid, fΓr)
-    𝜙 = sample(T, grid, rt->0)
-    K𝜙 = sample(T, grid, rt->0)
-
-    Kreg = real((rr .+ 0im).^(3/2)).*K
-    Arrreg = real((rr .+ 0im).^(5/2)).*Arr
-    γtθθreg = sample(T, grid, rt -> 0)
+    # α = sample(T, grid, fα)
+    # A = sample(T, grid, fA)
+    # βr = sample(T, grid, fβr)
+    # Br = sample(T, grid, fBr)
+    # χ = sample(T, grid, fχ)
+    # γtrr = sample(T, grid, fγtrr)
+    # γtθθ = sample(T, grid, fγtθθ)
+    # Arr = sample(T, grid, fArr)
+    # K = sample(T, grid, fK)
+    # Γr = sample(T, grid, fΓr)
+    # 𝜙 = sample(T, grid, rt->0)
+    # K𝜙 = sample(T, grid, rt->0)
+    #
+    # Kreg = real((rr .+ 0im).^(3/2)).*K
+    # Arrreg = real((rr .+ 0im).^(5/2)).*Arr
+    # γtθθreg = sample(T, grid, rt -> 0)
 
 
     state = GBSSN_Variables(α, A, βr, Br, χ, γtrr, γtθθreg, Arrreg, Kreg, Γr, 𝜙, K𝜙)
 
     cons = constraints(T,state,param)
 
+    #println(cons[1][1:100])
+
     plot(rr[3:n-10],cons[1][3:n-10])
 
-    #return GBSSN_Variables(α, A, βr, Br, dsχ, γtrr, γtθθreg, dsArrreg, Kreg, Γr, 𝜙, K𝜙)
+    #return GBSSN_Variables(α, A, βr, Br, χ, γtrr, γtθθreg, Arrreg, Kreg, Γr, 𝜙, K𝜙)
 
 end
 
@@ -1176,7 +1140,7 @@ function solution_saver(T,grid,sol,param,folder)
 
     for i in 1:tlen
         derivs[i] = rhs(sol[i],param,0)
-        cons[i,1:4] .= constraints(T,sol[i],derivs[i],param)
+        cons[i,1:4] .= constraints(T,sol[i],param)
         apphorizon[i] = horizon(T,sol[i],param)
     end
 
@@ -1246,7 +1210,7 @@ function main(points)
     drt = spacing(grid)
     dt = drt/4
 
-    tspan = T[0,20]
+    tspan = T[0,12]
     v = 1
 
     m = 0
