@@ -299,21 +299,28 @@ function deriv(f::GridFun{S,T}, order::Int=2, parity::Int=1) where {S,T}
             dvalues[i] = (f.values[i-2] - 4*f.values[i-1] + 3*f.values[i])/(2*dx)
         end
     elseif order == 4
-        if f.values[2] == 0.
-            dvalues[3] = ((-(25/12)*f.values[3] + 4*f.values[4]
-            - 3*f.values[5] + (4/3)*f.values[6]
-            - (1/4)*f.values[7]) / dx)
+        # if f.values[2] == 0.
+        #     dvalues[3] = ((-(25/12)*f.values[3] + 4*f.values[4]
+        #     - 3*f.values[5] + (4/3)*f.values[6]
+        #     - (1/4)*f.values[7]) / dx)
+        #
+        #     dvalues[4] = ((-3*f.values[3] - 10*f.values[4] + 18*f.values[5]
+        #     - 6*f.values[6] + f.values[7])/(12*dx))
+        # else
+        #     dvalues[3] = ((-3*f.values[2] - 10*f.values[3] + 18*f.values[4]
+        #      - 6*f.values[5] + f.values[6])/(12*dx))
+        #
+        #      dvalues[4] = (((1/12)*f.values[2] - (2/3)*f.values[3]
+        #      + (2/3)*f.values[5] - (1/12)*f.values[6]) / dx)
+        # end
 
-            dvalues[4] = ((-3*f.values[3] - 10*f.values[4] + 18*f.values[5]
-            - 6*f.values[6] + f.values[7])/(12*dx))
-        else
-            dvalues[3] = ((-3*f.values[2] - 10*f.values[3] + 18*f.values[4]
-             - 6*f.values[5] + f.values[6])/(12*dx))
+        dvalues[1] = ((-25*f.values[1] + 48*f.values[2] - 36*f.values[3]
+            +16*f.values[4]-3*f.values[5])/(12*dx))
 
-             dvalues[4] = (((1/12)*f.values[2] - (2/3)*f.values[3]
-             + (2/3)*f.values[5] - (1/12)*f.values[6]) / dx)
-        end
-        for i in 5:(n - 2)
+        dvalues[2] = ((-3*f.values[1] - 10*f.values[2] + 18*f.values[3]
+            - 6*f.values[4] + f.values[5])/(12*dx))
+
+        for i in 3:(n - 2)
             dvalues[i] = (((1/12)*f.values[i - 2] - (2/3)*f.values[i - 1]
             + (2/3)*f.values[i + 1] - (1/12)*f.values[i + 2]) / dx)
         end
@@ -324,7 +331,7 @@ function deriv(f::GridFun{S,T}, order::Int=2, parity::Int=1) where {S,T}
         dvalues[n] = ((3*f.values[n-4] - 16*f.values[n-3] + 36*f.values[n-2]
         - 48*f.values[n-1] + 25*f.values[n])/(12*dx))
     end
-    dvalues[1:2] .= 0.
+    #dvalues[1:2] .= 0.
     #dvalues[1:2] .= -parity*dvalues[4:-1:3]
     #dvalues[n-1:n] .= 0.
     return GridFun(f.grid, dvalues)
@@ -355,21 +362,27 @@ function deriv2(f::GridFun{S,T}, order::Int=2, parity::Int=1) where {S,T}
             - 5*f.values[i-1] + 2*f.values[i])/(dx^2))
         end
     elseif order == 4
-        if f.values[2] == 0.
-            d2values[3] = ((45*f.values[3] - 154*f.values[4] + 214*f.values[5]
-            - 156*f.values[6] + 61*f.values[7] - 10*f.values[8])/(12*dx^2))
+        # if f.values[2] == 0.
+        #     d2values[3] = ((45*f.values[3] - 154*f.values[4] + 214*f.values[5]
+        #     - 156*f.values[6] + 61*f.values[7] - 10*f.values[8])/(12*dx^2))
+        #
+        #     d2values[4] = ((10*f.values[3] - 15*f.values[4] - 4*f.values[5]
+        #     + 14*f.values[6] - 6*f.values[7] + f.values[8])/(12*dx^2))
+        # else
+        #     d2values[3] = ((11*f.values[2] - 20*f.values[3]
+        #     + 6*f.values[4] + 4*f.values[5] - f.values[6])/(12*dx^2))
+        #
+        #     d2values[4] = ((-(1/12)*f.values[2] + (4/3)*f.values[3] -
+        #     (5/2)*f.values[4] + (4/3)*f.values[5] - (1/12)*f.values[6])/
+        #     (dx^2))
+        # end
+        d2values[1] = ((45*f.values[1] - 154*f.values[2] + 214*f.values[3]
+            - 156*f.values[4] + 61*f.values[5] - 10*f.values[6])/(12*dx^2))
 
-            d2values[4] = ((10*f.values[3] - 15*f.values[4] - 4*f.values[5]
-            + 14*f.values[6] - 6*f.values[7] + f.values[8])/(12*dx^2))
-        else
-            d2values[3] = ((11*f.values[2] - 20*f.values[3]
-            + 6*f.values[4] + 4*f.values[5] - f.values[6])/(12*dx^2))
+        d2values[2] = ((10*f.values[1] - 15*f.values[2] - 4*f.values[3]
+            + 14*f.values[4] - 6*f.values[5] + 1*f.values[6])/(12*dx^2))
 
-            d2values[4] = ((-(1/12)*f.values[2] + (4/3)*f.values[3] -
-            (5/2)*f.values[4] + (4/3)*f.values[5] - (1/12)*f.values[6])/
-            (dx^2))
-        end
-        for i in 5:(n - 2)
+        for i in 3:(n - 2)
             d2values[i] = ((-(1/12)*f.values[i - 2] + (4/3)*f.values[i - 1] -
             (5/2)*f.values[i] + (4/3)*f.values[i + 1] - (1/12)*f.values[i + 2])/
             (dx^2))
@@ -382,7 +395,7 @@ function deriv2(f::GridFun{S,T}, order::Int=2, parity::Int=1) where {S,T}
         + 214*f.values[n-2] - 154*f.values[n-1] + 45*f.values[n])/(12*dx^2))
     end
     #d2values[1:2] .= parity*d2values[4:-1:3]
-    d2values[1:2] .= 0.
+    #d2values[1:2] .= 0.
     #d2values[n-1:n] .= 0.
     return GridFun(f.grid, d2values)
 end

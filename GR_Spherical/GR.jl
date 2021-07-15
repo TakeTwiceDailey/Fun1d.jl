@@ -1,6 +1,8 @@
 module GR_Spherical
 
 using DifferentialEquations
+using BoundaryValueDiffEq
+using OrdinaryDiffEq
 using Fun1d
 using DataFrames
 using CSV
@@ -213,7 +215,6 @@ function dissipation(f::GridFun{S,T}) where {S,T}
     return GridFun(f.grid, dvalues)
 end
 
-
 function init(::Type{T}, grid::Grid, param) where {T}
 
     ############################################
@@ -228,287 +229,204 @@ function init(::Type{T}, grid::Grid, param) where {T}
     drdrt = param[5]
     d2rdrt = param[6]
     m = param[7]
+    rtspan = param[8]
 
     num = 0
 
     # Initial conditions for Schwarzschild metric (Ker-Schild Coordinates)
 
     # Mass (no real reason not to use 1 here)
-    M = 1
+    #M = 1
 
-    fα(rt) = real((1+2*M/(r(rt))+0im)^(-1/2))
+    fα(M,rt) = real((1+2*M/(r(rt))+0im)^(-1/2))
     fA(rt) = 0.
-    fβr(rt) = (2*M/r(rt))/(1+2*M/r(rt))
+    fβr(M,rt) = (2*M/r(rt))*fα(M,rt)^2
     fBr(rt) = 0.
     fχ(rt) = 1.
-    fγtrr(rt) = 1+2*M/r(rt)
+    fγtrr(M,rt) = 1+2*M/r(rt)
     fγtθθ(rt) = r(rt)^2
-    fArr(rt) = -(4*M/3)*(3*M+2*r(rt))/real(((r(rt)^5)*(r(rt)+2*M)+0im)^(1/2))
-    fK(rt) = (2*M)*(3*M+r(rt))/real((r(rt)*(r(rt)+2*M)+0im)^(3/2))
-    fΓr(rt) = -(2*r(rt)+5*M)/(r(rt)+2*M)^2
+    fArr(M,∂M,rt) = (4/3)*(r(rt)*(M+r(rt))*∂M-M*(3*M+2*r(rt)))/real(((r(rt)^5)*(r(rt)+2*M)+0im)^(1/2))
+    fK(M,∂M,rt) = (2*M*(3*M+r(rt))+2*r(rt)*∂M*(M+r(rt)))/real((r(rt)*(r(rt)+2*M)+0im)^(3/2))
+    fΓr(M,∂M,rt) = (r(rt)*∂M-2*r(rt)-5*M)/(r(rt)+2*M)^2
 
-    r0 = 10
+    # fArr(M,rt) = -(4*M/3)*(3*M+2*r(rt))/real(((r(rt)^5)*(r(rt)+2*M)+0im)^(1/2))
+    # fK(M,rt) = (2*M)*(3*M+r(rt))/real((r(rt)*(r(rt)+2*M)+0im)^(3/2))
+    # fΓr(M,rt) = -(2*r(rt)+5*M)/(r(rt)+2*M)^2
+
+    r0 = 10.
     σr = 0.5
-    Amp = 0.05
+    #Amp = 1.
+    Amp = 0*0.05
 
     f𝜙(rt) = Amp*(1/r(rt))*exp(-(1/2)*((r(rt)-r0)/σr)^2)
     f∂𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r(rt)*r0-r(rt)^2-σr^2)/(r(rt)^2*σr^2)
-    f∂t𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r0-r(rt))/(r(rt)*σr^2)
+    #f∂t𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r0-r(rt))/(r(rt)*σr^2)
+    fK𝜙(rt) = 0.
 
-    #f∂χ(rt) = 0.
-    f∂γtrr(rt) = -2*M/(r(rt)^2)
+    f∂χ(rt) = 0.
+    f∂γtrr(M,∂M,rt) = 2*(r(rt)*∂M-M)/(r(rt)^2)
     f∂γtθθ(rt) = 2*r(rt)
-    #f∂Arr(rt) = (4*M/3)*(15*M^2+15*M*r(rt)+4*r(rt)^2)/real(((r(rt)^7)*((r(rt)+2*M)^3)+0im)^(1/2))
-    f∂K(rt) = -2*M*(9*M^2+10*M*r(rt)+2*r(rt)^2)/real((r(rt)*(r(rt)+2*M)+0im)^(5/2))
-    f∂Γr(rt) = 2*(r(rt)+3*M)/(r(rt)+2*M)^3
+    # f∂Arr(M,rt) = (4*M/3)*(15*M^2+15*M*r(rt)+4*r(rt)^2)/real(((r(rt)^7)*((r(rt)+2*M)^3)+0im)^(1/2))
+    # f∂K(M,rt) = -2*M*(9*M^2+10*M*r(rt)+2*r(rt)^2)/real((r(rt)*(r(rt)+2*M)+0im)^(5/2))
+    # f∂Γr(M,rt) = 2*(r(rt)+3*M)/(r(rt)+2*M)^3
+    #
+    f∂2γtθθ(rt) = 2.
+    f∂2χ(rt) = 0.
 
-    f∂2γtθθ(rt) = 2
+    # fgtt(M,rt) = -(1/fα(M,rt)^2)
+    # fgtr(M,rt) = fβr(M,rt)/fα(M,rt)^2
+    # fgrr(M,χ,rt) = χ/fγtrr(M,rt) - (fβr(M,rt)/fα(M,rt))^2
+    #
+    # # Lagrangian Density for scalar field
+    #
+    # f𝓛(M,χ,rt) = ((1/2)*fgtt(M,rt)*f∂t𝜙(rt)^2 + (1/2)*fgrr(M,χ,rt)*f∂𝜙(rt)^2
+    #  + fgtr(M,rt)*f∂𝜙(rt)*f∂t𝜙(rt) - (1/2)*(m^2)*f𝜙(rt)^2)
+    #
+    # # Stresss Energy components (contravariant indices)
+    #
+    # fTtt(M,χ,rt) = (fgtt(M,rt)*f∂t𝜙(rt) + fgtr(M,rt)*f∂𝜙(rt)).^2 - fgtt(M,rt)*f𝓛(M,χ,rt)
+    # fTtr(M,χ,rt) = ((fgtt(M,rt)*f∂t𝜙(rt) + fgtr(M,rt)*f∂𝜙(rt))*(fgtr(M,rt)*f∂t𝜙(rt)
+    #  + fgrr(M,χ,rt)*f∂𝜙(rt)) - fgtr(M,rt)*f𝓛(M,χ,rt))
 
-    fgtt(rt) = -(1/fα(rt)^2)
-    fgtr(rt) = fβr(rt)/fα(rt)^2
-    fgrr(rt,χ) = χ/fγtrr(rt) - (fβr(rt)/fα(rt))^2
+    #fK𝜙(rt) = -(f∂t𝜙(rt) - fβr(rt)*f∂𝜙(rt))/(2*fα(M,rt))
 
-    # Lagrangian Density for scalar field
+    fρ(M,rt) = (2*fK𝜙(rt)^2 + (1/2)*(fχ(rt)/fγtrr(M,rt))*f∂𝜙(rt)^2
+        + (1/2)*m^2*f𝜙(rt)^2)
 
-    f𝓛(rt,χ) = ((1/2)*fgtt(rt)*f∂t𝜙(rt)^2 + (1/2)*fgrr(rt,χ)*f∂𝜙(rt)^2 + fgtr(rt)*f∂𝜙(rt)*f∂t𝜙(rt) - (1/2)*(m^2)*f𝜙(rt)^2)
+    fSr(rt) = 2*fK𝜙(rt)*f∂𝜙(rt)
 
-    # Stresss Energy components (contravariant indices)
+    #f∂χ(rt,(χ, ∂χ, M)) = ∂χ
 
-    fTtt(rt,χ) = (fgtt(rt)*f∂t𝜙(rt) + fgtr(rt)*f∂𝜙(rt)).^2 - fgtt(rt)*f𝓛(rt,χ)
-    fTtr(rt,χ) = ((fgtt(rt)*f∂t𝜙(rt) + fgtr(rt)*f∂𝜙(rt))*(fgtr(rt)*f∂t𝜙(rt) + fgrr(rt,χ)*f∂𝜙(rt)) - fgtr(rt)*f𝓛(rt,χ))
+    # function f∂2χ(rt,(χ, X, Arr))
+    #  -(1/2)*fγtrr(rt)*(-(3/2)*(Arr/fγtrr(rt))^2 + (2/3)*fK(rt)^2
+    #  - (5/2)*((X^2)/χ)/fγtrr(rt)
+    #  + 2*χ/fγtθθ(rt) - 2*χ*(f∂2γtθθ(rt)/fγtθθ(rt))/fγtrr(rt)
+    #  + 2*X*(f∂γtθθ(rt)/fγtθθ(rt))/fγtrr(rt)
+    #  + χ*(f∂γtrr(rt)/(fγtrr(rt)^2))*(f∂γtθθ(rt)/fγtθθ(rt))
+    #  - X*f∂γtrr(rt)/(fγtrr(rt)^2)
+    #  + (1/2)*χ*((f∂γtθθ(rt)/fγtθθ(rt))^2)/fγtrr(rt) - 16*pi*fρ(rt,χ))
+    # end
+    #
+    # function f∂Arr(rt,(χ, X, Arr))
+    #  -fγtrr(rt)*(-(2/3)*f∂K(rt) - (3/2)*Arr*(X/χ)/fγtrr(rt)
+    #  + (3/2)*Arr*(f∂γtθθ(rt)/fγtθθ(rt))/fγtrr(rt) - Arr*f∂γtrr(rt)/(fγtrr(rt)^2)
+    #  - 8*pi*fγtrr(rt)*fSr(rt,χ)/χ)
+    # end
 
-    fρ(rt,χ) = (fα(rt)^2)*fTtt(rt,χ)
-    fSr(rt,χ) = fα(rt)*fTtr(rt,χ)
+    f∂M(M,rt) = 4*pi*(r(rt)^2)*fρ(M,rt)
 
-    f∂χ(rt,(χ, X, Arr)) = X
-
-    function f∂X(rt,(χ, X, Arr))
-     -(1/2)*fγtrr(rt)*(-(3/2)*(Arr/fγtrr(rt))^2 + (2/3)*fK(rt)^2
-     - (5/2)*((X^2)/χ)/fγtrr(rt)
-     + 2*χ/fγtθθ(rt) - 2*χ*(f∂2γtθθ(rt)/fγtθθ(rt))/fγtrr(rt)
-     + 2*X*(f∂γtθθ(rt)/fγtθθ(rt))/fγtrr(rt)
-     + χ*(f∂γtrr(rt)/(fγtrr(rt)^2))*(f∂γtθθ(rt)/fγtθθ(rt))
-     - X*f∂γtrr(rt)/(fγtrr(rt)^2)
-     + (1/2)*χ*((f∂γtθθ(rt)/fγtθθ(rt))^2)/fγtrr(rt) - 16*pi*fρ(rt,χ))
+    function f𝓗(M,∂M,rt)
+         (-(3/2)*(fArr(M,∂M,rt)/fγtrr(M,rt))^2 + (2/3)*fK(M,∂M,rt)^2
+         - (5/2)*((f∂χ(rt)^2)/fχ(rt))/fγtrr(M,rt) + 2*f∂2χ(rt)/fγtrr(M,rt)
+         + 2*fχ(rt)/fγtθθ(rt) - 2*fχ(rt)*(f∂2γtθθ(rt)/fγtθθ(rt))/fγtrr(M,rt)
+         + 2*f∂χ(rt)*(f∂γtθθ(rt)/fγtθθ(rt))/fγtrr(M,rt)
+         + fχ(rt)*(f∂γtrr(M,∂M,rt)/(fγtrr(M,rt)^2))*(f∂γtθθ(rt)/fγtθθ(rt))
+         - f∂χ(rt)*f∂γtrr(M,∂M,rt)/(fγtrr(M,rt)^2)
+         + (1/2)*fχ(rt)*((f∂γtθθ(rt)/fγtθθ(rt))^2)/fγtrr(M,rt) - 16*pi*fρ(M,rt))
     end
 
-    function f∂Arr(rt,(χ, X, Arr))
-     -fγtrr(rt)*(-(2/3)*f∂K(rt) - (3/2)*Arr*(X/χ)/fγtrr(rt)
-     + (3/2)*Arr*(f∂γtθθ(rt)/fγtθθ(rt))/fγtrr(rt) - Arr*f∂γtrr(rt)/(fγtrr(rt)^2)
-     - 8*pi*fγtrr(rt)*fSr(rt,χ)/χ)
-    end
+    # function f𝓜r(M,∂M,rt)
+    #  (f∂Arr(M,∂M,rt)/fγtrr(rt) - (2/3)*f∂K(rt) - (3/2)*fArr(rt)*(f∂χ(rt)/fχ(rt))/fγtrr(rt)
+    #  + (3/2)*fArr(rt)*(f∂γtθθ(rt)/fγtθθ(rt))/fγtrr(rt) - fArr(rt)*f∂γtrr(rt)/(fγtrr(rt)^2)
+    #  - 8*pi*fγtrr(rt)*fSr(rt,fχ(rt))/fχ(rt))
+    # end
 
     # grid = Grid(domain,Int((2^num)*(n-5)+1))
     # n = grid.ncells + 4
 
-    α = sample(T, grid, fα)
-    A = sample(T, grid, fA)
-    βr = sample(T, grid, fβr)
-    Br = sample(T, grid, fBr)
-    χ = sample(T, grid, fχ)
-    γtrr = sample(T, grid, fγtrr)
-    γtθθ = sample(T, grid, fγtθθ)
-    Arr = sample(T, grid, fArr)
-    K = sample(T, grid, fK)
-    Γr = sample(T, grid, fΓr)
-    𝜙 = sample(T, grid, f𝜙)
-    ∂𝜙 = sample(T, grid, f∂𝜙)
-    ∂t𝜙 = sample(T, grid, f∂t𝜙)
-
-    ∂χ = sample(T, grid, rt->0)
+    # ∂χ = sample(T, grid, rt->0)
     # ∂γtrr = sample(T, grid, f∂γtrr)
     # ∂γtθθ = sample(T, grid, f∂γtθθ)
     # ∂K = sample(T, grid, f∂K)
-    ∂Arr = sample(T, grid, rt->(4*M/3)*(15*M^2+15*M*r(rt)+4*r(rt)^2)/real(((r(rt)^7)*((r(rt)+2*M)^3)+0im)^(1/2)))
+    #∂Arr = sample(T, grid, rt->(4*M/3)*(15*M^2+15*M*r(rt)+4*r(rt)^2)/real(((r(rt)^7)*((r(rt)+2*M)^3)+0im)^(1/2)))
 
     # ∂2γtθθ = sample(T, grid, f∂2γtθθ)
     #
     # order = 4
     #
-    rr = sample(T, grid, param[4])
+    # rr = sample(T, grid, param[4])
     # drdrt = sample(Float64, grid, param[5])
     #
     # ∂rt𝜙 = deriv(𝜙,order,1)
     # ∂𝜙 = ∂rt𝜙./drdrt
 
-    K𝜙 = -(∂t𝜙 - βr.*∂𝜙)./(2*α)
-
-    X = ∂χ
-    ∂X = sample(T, grid, rt -> 0.)
-
-    Kreg = real((rr .+ 0im).^(3/2)).*K
-    # ∂Kreg = real((r .+ 0im).^(3/2)).*∂K + (3/2)*real((r .+ 0im).^(1/2)).*K
-    # Arrreg = real((r .+ 0im).^(5/2)).*Arr
-    # ∂Arrreg = real((r .+ 0im).^(5/2)).*∂Arr + (5/2)*real((r .+ 0im).^(3/2)).*Arr
-    #
-    γtθθreg = sample(T, grid, rt -> 0)
-
-    # # Inverse metric (contravariant indices)
-    #
-    # gtt = -(1 ./α.^2)
-    # gtr = βr./α.^2
-    # grr = χ./γtrr - (βr./α).^2
-    # gθθ = χ./γtθθ
-    #
-    # # Lagrangian Density for scalar field
-    #
-    # 𝓛 = (1/2)*gtt.*∂t𝜙.^2 + (1/2)*grr.*∂𝜙.^2 + gtr.*∂𝜙.*∂t𝜙 - (1/2)*(m^2)*𝜙.^2
-    #
-    # # Stresss Energy components (contravariant indices)
-    #
-    # Ttt = (gtt.*∂t𝜙 + gtr.*∂𝜙).^2 - gtt.*𝓛
-    # Ttr = (gtt.*∂t𝜙 + gtr.*∂𝜙).*(gtr.*∂t𝜙 + grr.*∂𝜙) - gtr.*𝓛
-    #
-    # ρ = (α.^2).*Ttt
-    # Sr = α.*Ttr
+    # fArrreg(M,∂M,rt) = real((r(rt)+ 0im)^(5/2))*fArr(M,∂M,rt)
+    # fKreg(M,∂M,rt) = real((r(rt)+ 0im)^(3/2))*fK(M,∂M,rt)
 
     # Constraint Equations
 
-    rt = sample(T, grid, rt->rt)
-    r = param[4]
+    rtspan = (rtspan[1], rtspan[2])
+    #rtspan = (rtspan[2], 0.5)
 
-    for i = n-1:-1:2
+    function constraintSystem(M, param, rt)
+        f∂M(M,rt)
+    end
 
-        ∂χ[i] = f∂χ(rt[i],(χ[i], X[i], Arr[i]))
-        ∂X[i] = f∂X(rt[i],(χ[i], X[i], Arr[i]))
-        ∂Arr[i] = f∂Arr(rt[i],(χ[i], X[i], Arr[i]))
-
-        # χ[i-1] = χ[i] - drt*(3*∂χ[i]-∂χ[i+1])/2
-        # X[i-1] = X[i] - drt*(3*∂X[i]-∂X[i+1])/2
-        # Arr[i-1] = Arr[i] - drt*(3*∂Arr[i]-∂Arr[i+1])/2
-
-        χ[i-1] = χ[i] - drt*∂χ[i]
-        X[i-1] = X[i] - drt*∂X[i]
-        Arr[i-1] = Arr[i] - drt*∂Arr[i]
-
-        # k1χ = f∂χ(rt[i],(χ[i], X[i], Arr[i]))
-        # k1X = f∂X(rt[i],(χ[i], X[i], Arr[i]))
-        # k1Arr = f∂Arr(rt[i],(χ[i], X[i], Arr[i]))
-        #
-        # k2χ = f∂χ(rt[i]+drt/2,(χ[i]+drt*k1χ/2,X[i]+drt*k1X/2,Arr[i]+drt*k1Arr/2))
-        # k2X = f∂X(rt[i]+drt/2,(χ[i]+drt*k1χ/2,X[i]+drt*k1X/2,Arr[i]+drt*k1Arr/2))
-        # k2Arr = f∂Arr(rt[i]+drt/2,(χ[i]+drt*k1χ/2,X[i]+drt*k1X/2,Arr[i]+drt*k1Arr/2))
-        #
-        # k3χ = f∂χ(rt[i]+drt/2,(χ[i]+drt*k2χ/2,X[i]+drt*k2X/2,Arr[i]+drt*k2Arr/2))
-        # k3X = f∂X(rt[i]+drt/2,(χ[i]+drt*k2χ/2,X[i]+drt*k2X/2,Arr[i]+drt*k2Arr/2))
-        # k3Arr = f∂Arr(rt[i]+drt/2,(χ[i]+drt*k2χ/2,X[i]+drt*k2X/2,Arr[i]+drt*k2Arr/2))
-        #
-        # k4χ = f∂χ(rt[i+1],(χ[i]+drt*k3χ,X[i]+drt*k3X,Arr[i]+drt*k3Arr))
-        # k4X = f∂X(rt[i+1],(χ[i]+drt*k3χ,X[i]+drt*k3X,Arr[i]+drt*k3Arr))
-        # k4Arr = f∂Arr(rt[i+1],(χ[i]+drt*k3χ,X[i]+drt*k3X,Arr[i]+drt*k3Arr))
-        #
-        # χ[i+1] = χ[i] + drt*(k1χ + 2*k2χ + 2*k3χ + k4χ)/6
-        # X[i+1] = X[i] + drt*(k1X + 2*k2X + 2*k3X + k4X)/6
-        # Arr[i+1] = Arr[i] + drt*(k1Arr + 2*k2Arr + 2*k3Arr + k4Arr)/6
-
-        tol = 1.
-        atol = eps(T)^(T(3) / 4)
-
-        i -= 1
-
-        while true
-
-            initχ = χ[i]
-            initX = X[i]
-            initArr = Arr[i]
-
-            ∂χ[i] = f∂χ(rt[i],(χ[i],X[i],Arr[i]))
-            ∂X[i] = f∂X(rt[i],(χ[i],X[i],Arr[i]))
-            ∂Arr[i] = f∂Arr(rt[i],(χ[i],X[i],Arr[i]))
-
-            χ[i] = χ[i+1] - drt*(∂χ[i+1] + ∂χ[i])/2
-            X[i] = X[i+1] - drt*(∂X[i+1] + ∂X[i])/2
-            Arr[i] = Arr[i+1] - drt*(∂Arr[i+1] + ∂Arr[i])/2
-
-            global tol = maximum(abs.((initχ-χ[i],initX-X[i],initArr-Arr[i])))
-
-            if tol < atol
-                break
-            end
-
-        end
-
-        i += 1
-
-     end
-
-    #  grid = initgrid
-    #  n = grid.ncells + 4
-    #
-    #  r = param[4]
-    #  drdrt = param[5]
-    #  d2rdrt = param[6]
-    #
-    #  α = sample(T, grid, fα)
-    #  A = sample(T, grid, fA)
-    #  βr = sample(T, grid, fβr)
-    #  Br = sample(T, grid, fBr)
-    #  γtrr = sample(T, grid, fγtrr)
-    #  γtθθreg = sample(T, grid, rt -> 0)
-    #  K = sample(T, grid, fK)
-    #  Γr = sample(T, grid, fΓr)
-    #  𝜙 = sample(T, grid, f𝜙)
-    #  ∂t𝜙 = sample(T, grid, f∂t𝜙)
-    #
-    #  dsχ = sample(T, grid, fχ)
-    #  dsArr = sample(T, grid, fArr)
-    #
-    #  r = sample(T, grid, param[4])
-    #  drdrt = sample(T, grid, param[5])
-    #
-    #  Kreg = real((r .+ 0im).^(3/2)).*K
-    #dsArrreg = real((r.+0im).^(5/2)).*dsArr
-    #
-    #  ∂rt𝜙 = deriv(𝜙,order,1)
-    #  ∂𝜙 = ∂rt𝜙./drdrt
-    #
-    #  K𝜙 = -(∂t𝜙 - βr.*∂𝜙)./(2*α)
-    #
-    #  for i = 3:n-3
-    #
-    #      val = Int((i-3)*(2^num) + 3)
-    #
-    #      dsχ[i] = χ[val]
-    #      dsArr[i] =  Arr[val]
-    #      dsArrreg[i] = real((r[i]+0im)^(5/2))*dsArr[i]
-    #
-    #      if (i < 10 || i > n - 6 )
-    #         println(val)
-    #     end
-    #
+    # function boundaryCondition!(residual, M, param, rt)
+    #     residual = M[1] - 1. #inner boundary condition
     # end
 
-    #rr = sample(T, grid, param[4])
+    atol = 1e-15
 
-    Arrreg = real((rr.+0im).^(5/2)).*Arr
+    BVP = ODEProblem(constraintSystem, 1., rtspan, param)
+    M = solve(BVP, Tsit5(), abstol=atol, dt=drt, adaptive=false)
 
-    # α = sample(T, grid, fα)
-    # A = sample(T, grid, fA)
-    # βr = sample(T, grid, fβr)
-    # Br = sample(T, grid, fBr)
-    # χ = sample(T, grid, fχ)
-    # γtrr = sample(T, grid, fγtrr)
-    # γtθθ = sample(T, grid, fγtθθ)
-    # Arr = sample(T, grid, fArr)
-    # K = sample(T, grid, fK)
-    # Γr = sample(T, grid, fΓr)
-    # 𝜙 = sample(T, grid, rt->0)
-    # K𝜙 = sample(T, grid, rt->0)
+    ∂M(rt) = f∂M(M(rt),rt)
+
+    # M(rt) = 1.
+    # ∂M(rt) = 0.
+
+    α = sample(T, grid, rt -> fα(M(rt),rt) )
+    A = sample(T, grid, fA)
+    βr = sample(T, grid, rt -> fβr(M(rt),rt) )
+    Br = sample(T, grid, fBr)
+    χ = sample(T, grid, fχ)
+    γtrr = sample(T, grid, rt -> fγtrr(M(rt),rt) )
+    γtθθreg = sample(T, grid, rt -> 0)
+    Arr = sample(T, grid, rt -> fArr(M(rt),∂M(rt),rt) )
+    K = sample(T, grid, rt -> fK(M(rt),∂M(rt),rt) )
+    Γr = sample(T, grid, rt -> fΓr(M(rt),∂M(rt),rt))
+    𝜙 = sample(T, grid, f𝜙)
+    K𝜙 = sample(T, grid, fK𝜙)
+
+    # ∂𝜙 = sample(T, grid, f∂𝜙)
+    # ∂t𝜙 = sample(T, grid, f∂t𝜙)
     #
-    # Kreg = real((rr .+ 0im).^(3/2)).*K
-    # Arrreg = real((rr .+ 0im).^(5/2)).*Arr
-    # γtθθreg = sample(T, grid, rt -> 0)
+    # K𝜙 = -(∂t𝜙 - βr.*∂𝜙)./(2*α)
+    #
+
+    state = GBSSN_Variables(α, A, βr, Br, χ, γtrr, γtθθreg, Arr, K, Γr, 𝜙, K𝜙)
+
+    #
+    #cons = constraints(T,state,param)
+
+    #println(f∂M(14.,(1., 0., 1.)))
+    #println(f∂2χ(14.,(1., 0., 1.)))
+
+    #rr = sample(T, grid, param[4])
+    # 𝓗 = sample(T, grid, f𝓗)
+    # 𝓜r = sample(T, grid, f𝓜r)
+    #
+    # ∂2χ = sample(T, grid, rt -> f∂Arr(rt,(1, 0, fArr(rt)))-f∂Arr(rt))
+    #
+    #println(χ[1:10].-1)
+    # println(χ[n-10:n].-1)
+    #
+    # temp1 = sample(T, grid, rt -> solution(rt)[3]-0*fArr(rt))
+    #temp = sample(T, grid, rt -> f𝓗(M(rt),∂M(rt),rt))
+    #temp = sample(T, grid, rt -> M(rt))
+
+    #plot(rr[5:n-2],temp[5:n-2])
+    #plot!(rr[5:n-2],temp1[5:n-2])
+
+    #plot(solution, vars=(0,1))
+    #println(temp[1:10])
+    #println(temp[n-15:n-5])
 
 
-    state = GBSSN_Variables(α, A, βr, Br, χ, γtrr, γtθθreg, Arrreg, Kreg, Γr, 𝜙, K𝜙)
+    #plot(rr[5:n-4],cons[1][5:n-4])
 
-    cons = constraints(T,state,param)
-
-    #println(cons[1][1:100])
-
-    plot(rr[3:n-10],cons[1][3:n-10])
-
-    #return GBSSN_Variables(α, A, βr, Br, χ, γtrr, γtθθreg, Arrreg, Kreg, Γr, 𝜙, K𝜙)
+    return state
 
 end
 
@@ -539,8 +457,8 @@ function rhs(state::GBSSN_Variables, param, t)
     χ = state.χ
     γtrr = state.γtrr
     γtθθreg = state.γtθθ
-    Arrreg = state.Arr
-    Kreg = state.K
+    Arr = state.Arr
+    K = state.K
     Γr = state.Γr
     𝜙 = state.𝜙
     K𝜙 =state.K𝜙
@@ -574,13 +492,14 @@ function rhs(state::GBSSN_Variables, param, t)
 
     # First derivatives
     ∂rtα = deriv(α,order,1)
+    ∂rtA = deriv(A,order,1)
     ∂rtβr = deriv(βr,order,-1)
     ∂rtBr = deriv(Br,order,-1)
     ∂rtχ = deriv(χ,order,1)
     ∂rtγtrr = deriv(γtrr,order,1)
     ∂rtγtθθreg = deriv(γtθθreg,order,1)
-    ∂rtArrreg = deriv(Arrreg,order,1)
-    ∂rtKreg = deriv(Kreg,order,1)
+    ∂rtArr = deriv(Arr,order,1)
+    ∂rtK = deriv(K,order,1)
     ∂rtΓr = deriv(Γr,order,-1)
     ∂rt𝜙 = deriv(𝜙,order,1)
     ∂rtK𝜙 = deriv(K𝜙,order,-1)
@@ -601,13 +520,14 @@ function rhs(state::GBSSN_Variables, param, t)
     d2rdrt = sample(Float64, α.grid, param[6])
 
     ∂α = ∂rtα./drdrt
+    ∂A = ∂rtA./drdrt
     ∂βr = ∂rtβr./drdrt
     ∂Br = ∂rtBr./drdrt
     ∂χ = ∂rtχ./drdrt
     ∂γtrr = ∂rtγtrr./drdrt
     ∂γtθθreg = ∂rtγtθθreg./drdrt
-    ∂Arrreg = ∂rtArrreg./drdrt
-    ∂Kreg = ∂rtKreg./drdrt
+    ∂Arr = ∂rtArr./drdrt
+    ∂K = ∂rtK./drdrt
     ∂Γr = ∂rtΓr./drdrt
     ∂𝜙 = ∂rt𝜙./drdrt
     ∂K𝜙 = ∂rtK𝜙./drdrt
@@ -634,11 +554,11 @@ function rhs(state::GBSSN_Variables, param, t)
     # ∂γtθθ[1:2] .= 0.
     # ∂2γtθθ[1:2] .= 0.
 
-    K = real((r .+ 0im).^(-3/2)).*Kreg
-    ∂K = real((r .+ 0im).^(-3/2)).*∂Kreg - (3/2)*real((r .+ 0im).^(-5/2)).*Kreg
-
-    Arr = real((r .+ 0im).^(-5/2)).*Arrreg
-    ∂Arr = real((r .+ 0im).^(-5/2)).*∂Arrreg - (5/2)*real((r .+ 0im).^(-7/2)).*Arrreg
+    # K = real((r .+ 0im).^(-3/2)).*Kreg
+    # ∂K = real((r .+ 0im).^(-3/2)).*∂Kreg - (3/2)*real((r .+ 0im).^(-5/2)).*Kreg
+    #
+    # Arr = real((r .+ 0im).^(-5/2)).*Arrreg
+    # ∂Arr = real((r .+ 0im).^(-5/2)).*∂Arrreg - (5/2)*real((r .+ 0im).^(-7/2)).*Arrreg
 
     # Γr = -(2 ./r).*Γreg
     # ∂Γr = -(2 ./r).*∂Γreg + (2 ./(r.^2)).*Γreg
@@ -734,30 +654,37 @@ function rhs(state::GBSSN_Variables, param, t)
 
     # Inverse metric (contravariant indices)
 
-    gtt = -(1 ./α.^2)
-    gtr = βr./α.^2
-    grr = χ./γtrr - (βr./α).^2
-    gθθ = χ./γtθθ
-
-    # Lagrangian Density for scalar field
-
-    𝓛 = (1/2)*gtt.*∂t𝜙.^2 + (1/2)*grr.*∂𝜙.^2 + gtr.*∂𝜙.*∂t𝜙 - (1/2)*(m^2)*𝜙.^2
-
-    # Stresss Energy components (contravariant indices)
-
-    Ttt = (gtt.*∂t𝜙 + gtr.*∂𝜙).^2 - gtt.*𝓛
-    Trr = (gtr.*∂t𝜙 + grr.*∂𝜙).^2 - grr.*𝓛
-    Ttr = (gtt.*∂t𝜙 + gtr.*∂𝜙).*(gtr.*∂t𝜙 + grr.*∂𝜙) - gtr.*𝓛
-    Tθθ = -gθθ.*𝓛
+    # gtt = -(1 ./α.^2)
+    # gtr = βr./α.^2
+    # grr = χ./γtrr - (βr./α).^2
+    # gθθ = χ./γtθθ
+    #
+    # # Lagrangian Density for scalar field
+    #
+    # 𝓛 = (1/2)*gtt.*∂t𝜙.^2 + (1/2)*grr.*∂𝜙.^2 + gtr.*∂𝜙.*∂t𝜙 - (1/2)*(m^2)*𝜙.^2
+    #
+    # # Stresss Energy components (contravariant indices)
+    #
+    # Ttt = (gtt.*∂t𝜙 + gtr.*∂𝜙).^2 - gtt.*𝓛
+    # Trr = (gtr.*∂t𝜙 + grr.*∂𝜙).^2 - grr.*𝓛
+    # Ttr = (gtt.*∂t𝜙 + gtr.*∂𝜙).*(gtr.*∂t𝜙 + grr.*∂𝜙) - gtr.*𝓛
+    # Tθθ = -gθθ.*𝓛
 
     # Source Terms to GR
     # Sr here is a contravariant vector component
     # Srr here is a covariant tensor component
 
-    ρ = (α.^2).*Ttt
-    Sr = α.*Ttr
-    Srr = ((γtrr.^2)./(χ.^2)).*Trr
-    S = (γtrr.*Trr + 2*γtθθ.*Tθθ)./χ
+    # ρ = (α.^2).*Ttt
+    # Sr = α.*Ttr
+    # Srr = ((γtrr.^2)./(χ.^2)).*Trr
+    # S = (γtrr.*Trr + 2*γtθθ.*Tθθ)./χ
+
+
+    ρ = 2*K𝜙.^2 + (1/2)*(χ./γtrr).*∂𝜙.^2 + (1/2)*m^2*𝜙.^2
+    Sr = 2*K𝜙.*∂𝜙
+    S = 6*K𝜙.^2 - (1/2)*(χ./γtrr).*∂𝜙.^2 - (3/2)*m^2*𝜙.^2
+    Srr = (γtrr./χ).*(2*K𝜙.^2 + (1/2)*(χ./γtrr).*∂𝜙.^2 - (1/2)*m^2*𝜙.^2)
+
 
     ∂tArr .+= -8*pi*α.*(χ.*Srr - (1/3)*S.*γtrr)
     ∂tK .+= 4*pi*α.*(ρ + S)
@@ -769,8 +696,8 @@ function rhs(state::GBSSN_Variables, param, t)
     # ∂tγtθθreg = (1 ./r.^2).*∂tγtθθ
 
     ∂tγtθθreg = (1 ./r.^2).*∂tγtθθ
-    ∂tArrreg = real((r .+ 0im).^(5/2)).*∂tArr
-    ∂tKreg = real((r .+ 0im).^(3/2)).*∂tK
+    # ∂tArrreg = real((r .+ 0im).^(5/2)).*∂tArr
+    # ∂tKreg = real((r .+ 0im).^(3/2)).*∂tK
 
     # Numerical Dissipation terms
 
@@ -781,8 +708,8 @@ function rhs(state::GBSSN_Variables, param, t)
     ∂4χ = dissipation(χ)
     ∂4γtrr = dissipation(γtrr)
     ∂4γtθθreg = dissipation(γtθθreg)
-    ∂4Arrreg = dissipation(Arrreg)
-    ∂4Kreg = dissipation(Kreg)
+    ∂4Arr = dissipation(Arr)
+    ∂4K = dissipation(K)
     ∂4Γr = dissipation(Γr)
     ∂4𝜙 = dissipation(𝜙)
     ∂4K𝜙 = dissipation(K𝜙)
@@ -808,26 +735,27 @@ function rhs(state::GBSSN_Variables, param, t)
     ∂tχ .+= (1/16)*sign*σ*(drt^3)*∂4χ
     ∂tγtrr .+= (1/16)*sign*σ*(drt^3)*∂4γtrr
     ∂tγtθθreg .+= (1/16)*sign*σ*(drt^3)*∂4γtθθreg
-    ∂tArrreg .+= (1/16)*sign*σ*(drt^3)*∂4Arrreg
-    ∂tKreg .+= (1/16)*sign*σ*(drt^3)*∂4Kreg
+    ∂tArr .+= (1/16)*sign*σ*(drt^3)*∂4Arr
+    ∂tK .+= (1/16)*sign*σ*(drt^3)*∂4K
     ∂tΓr .+= (1/16)*sign*σ*(drt^3)*∂4Γr
     ∂t𝜙 .+= (1/16)*sign*σ*(drt^3)*∂4𝜙
     ∂tK𝜙 .+= (1/16)*sign*σ*(drt^3)*∂4K𝜙
 
     # Inner temporal boundary Conditions
 
-    ∂tα[1:2] .= 0.
-    ∂tA[1:2] .= 0.
-    ∂tβr[1:2] .= 0.
-    ∂tBr[1:2] .= 0.
-    ∂tχ[1:2] .= 0.
-    ∂tγtrr[1:2] .= 0.
-    ∂tγtθθreg[1:2] .= 0.
-    ∂tArrreg[1:2] .= 0.
-    ∂tKreg[1:2] .= 0.
-    ∂tΓr[1:2] .= 0.
-    ∂t𝜙[1:2] .= 0.
-    ∂tK𝜙[1:2] .= 0.
+    ∂tα[1:2] .= ∂α[1:2]
+    ∂tA[1:2] .= ∂A[1:2]
+    ∂tβr[1:2] .= ∂βr[1:2]
+    ∂tBr[1:2] .= ∂Br[1:2]
+    ∂tχ[1:2] .= ∂χ[1:2]
+    ∂tγtrr[1:2] .= ∂γtrr[1:2]
+    ∂tγtθθreg[1:2] .= ∂γtθθreg[1:2]
+    ∂tArr[1:2] .= ∂Arr[1:2]
+    ∂tK[1:2] .= ∂K[1:2]
+    ∂tΓr[1:2] .= ∂Γr[1:2]
+    ∂t𝜙[1:2] .= ∂𝜙[1:2]
+    ∂tK𝜙[1:2] .= ∂K𝜙[1:2]
+
 
     # Outer temporal boundary conditions
 
@@ -838,8 +766,8 @@ function rhs(state::GBSSN_Variables, param, t)
     ∂tχ[(n-1):n] .= 0.
     ∂tγtrr[(n-1):n] .= 0.
     ∂tγtθθreg[(n-1):n] .= 0.
-    ∂tArrreg[(n-1):n] .= 0.
-    ∂tKreg[(n-1):n] .= 0.
+    ∂tArr[(n-1):n] .= 0.
+    ∂tK[(n-1):n] .= 0.
     ∂tΓr[(n-1):n] .= 0.
     ∂t𝜙[(n-1):n] .= 0.
     ∂tK𝜙[(n-1):n] .= 0.
@@ -877,7 +805,7 @@ function rhs(state::GBSSN_Variables, param, t)
     # ∂tK[(n-1):n] .= (K[(n-1):n] .- K0)./r[(n-1):n] - ∂K[(n-1):n] + hK./(r[(n-1):n].^w)
     # ∂tΓreg[(n-1):n] .= (Γreg[(n-1):n] .- Γreg0)./r[(n-1):n] - ∂Γreg[(n-1):n] + hΓreg./(r[(n-1):n].^w)
 
-    return GBSSN_Variables(∂tα,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrr,∂tγtθθreg,∂tArrreg,∂tKreg,∂tΓr,∂t𝜙,∂tK𝜙)
+    return GBSSN_Variables(∂tα,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrr,∂tγtθθreg,∂tArr,∂tK,∂tΓr,∂t𝜙,∂tK𝜙)
 
 end
 
@@ -900,8 +828,8 @@ function constraints(T,state::GBSSN_Variables,param)
     χ = state.χ
     γtrr = state.γtrr
     γtθθreg = state.γtθθ
-    Arrreg = state.Arr
-    Kreg = state.K
+    Arr = state.Arr
+    K = state.K
     Γr = state.Γr
     𝜙 = state.𝜙
     K𝜙 = state.K𝜙
@@ -912,10 +840,10 @@ function constraints(T,state::GBSSN_Variables,param)
 
     v = param[3]
 
-    if v == 1 # Lagrangian Condition
-        γtθθreg[2] = ((-315*γtθθreg[3] + 210*γtθθreg[4] - 126*γtθθreg[5]
-        + 45*γtθθreg[6] - 7*γtθθreg[7])/63)
-    end
+    # if v == 1 # Lagrangian Condition
+    #     γtθθreg[2] = ((-315*γtθθreg[3] + 210*γtθθreg[4] - 126*γtθθreg[5]
+    #     + 45*γtθθreg[6] - 7*γtθθreg[7])/63)
+    # end
 
     # Spatial Derivatives
 
@@ -925,8 +853,8 @@ function constraints(T,state::GBSSN_Variables,param)
     ∂rtχ = deriv(χ,order,1)
     ∂rtγtrr = deriv(γtrr,order,1)
     ∂rtγtθθreg = deriv(γtθθreg,order,1)
-    ∂rtArrreg = deriv(Arrreg,order,1)
-    ∂rtKreg = deriv(Kreg,order,1)
+    ∂rtArr = deriv(Arr,order,1)
+    ∂rtK = deriv(K,order,1)
     ∂rt𝜙 = deriv(𝜙,order,1)
 
     # Second derivatives
@@ -943,14 +871,14 @@ function constraints(T,state::GBSSN_Variables,param)
     ∂χ = ∂rtχ./drdrt
     ∂γtrr = ∂rtγtrr./drdrt
     ∂γtθθreg = ∂rtγtθθreg./drdrt
-    ∂Arrreg = ∂rtArrreg./drdrt
-    ∂Kreg = ∂rtKreg./drdrt
+    ∂Arr = ∂rtArr./drdrt
+    ∂K = ∂rtK./drdrt
     ∂𝜙 = ∂rt𝜙./drdrt
 
     ∂2χ = (∂2rtχ - d2rdrt.*∂χ)./(drdrt.^2)
     ∂2γtθθreg = (∂2rtγtθθreg - d2rdrt.*∂γtθθreg)./(drdrt.^2)
 
-    ∂t𝜙 = βr.*∂𝜙 - 2*α.*K𝜙
+    #∂t𝜙 = βr.*∂𝜙 - 2*α.*K𝜙
 
     # Conversions from regularized variables to canonical variables
 
@@ -958,34 +886,38 @@ function constraints(T,state::GBSSN_Variables,param)
     ∂γtθθ = (r.^2).*∂γtθθreg + (2*r).*(γtθθreg .+ 1)
     ∂2γtθθ = (r.^2).*∂2γtθθreg + (4*r).*∂γtθθreg + 2*(γtθθreg .+ 1)
 
-    K = real((r .+ 0im).^(-3/2)).*Kreg
-    ∂K = real((r .+ 0im).^(-3/2)).*∂Kreg - (3/2)*real((r .+ 0im).^(-5/2)).*Kreg
-
-    Arr = real((r .+ 0im).^(-5/2)).*Arrreg
-    ∂Arr = real((r .+ 0im).^(-5/2)).*∂Arrreg - (5/2)*real((r .+ 0im).^(-7/2)).*Arrreg
+    # K = real((r .+ 0im).^(-3/2)).*Kreg
+    # ∂K = real((r .+ 0im).^(-3/2)).*∂Kreg - (3/2)*real((r .+ 0im).^(-5/2)).*Kreg
+    #
+    # Arr = real((r .+ 0im).^(-5/2)).*Arrreg
+    # ∂Arr = real((r .+ 0im).^(-5/2)).*∂Arrreg - (5/2)*real((r .+ 0im).^(-7/2)).*Arrreg
 
     # Γr = -(2 ./r).*Γreg
 
     # Inverse metric (contravariant indices)
 
-    gtt = -(1 ./α.^2)
-    gtr = βr./α.^2
-    grr = χ./γtrr - (βr./α).^2
-    gθθ = χ./γtθθ
+    # gtt = -(1 ./α.^2)
+    # gtr = βr./α.^2
+    # grr = χ./γtrr - (βr./α).^2
+    # gθθ = χ./γtθθ
+    #
+    # # Lagrangian Density for scalar field
+    #
+    # 𝓛 = (1/2)*gtt.*∂t𝜙.^2 + (1/2)*grr.*∂𝜙.^2 + gtr.*∂𝜙.*∂t𝜙 - (1/2)*(m^2)*𝜙.^2
+    #
+    # # Stresss Energy components (contravariant indices)
+    #
+    # Ttt = (gtt.*∂t𝜙 + gtr.*∂𝜙).^2 - gtt.*𝓛
+    # Ttr = (gtt.*∂t𝜙 + gtr.*∂𝜙).*(gtr.*∂t𝜙 + grr.*∂𝜙) - gtr.*𝓛
+    #
+    # # Source Terms to the constraints
+    #
+    # ρ = (α.^2).*Ttt
+    # Sr = α.*Ttr
 
-    # Lagrangian Density for scalar field
+    ρ = 2*K𝜙.^2 + (1/2)*(χ./γtrr).*∂𝜙.^2 + (1/2)*m^2*𝜙.^2
 
-    𝓛 = (1/2)*gtt.*∂t𝜙.^2 + (1/2)*grr.*∂𝜙.^2 + gtr.*∂𝜙.*∂t𝜙 - (1/2)*(m^2)*𝜙.^2
-
-    # Stresss Energy components (contravariant indices)
-
-    Ttt = (gtt.*∂t𝜙 + gtr.*∂𝜙).^2 - gtt.*𝓛
-    Ttr = (gtt.*∂t𝜙 + gtr.*∂𝜙).*(gtr.*∂t𝜙 + grr.*∂𝜙) - gtr.*𝓛
-
-    # Source Terms to the constraints
-
-    ρ = (α.^2).*Ttt
-    Sr = α.*Ttr
+    Sr = 2*K𝜙.*∂𝜙
 
     # Constraint Equations
 
@@ -996,13 +928,13 @@ function constraints(T,state::GBSSN_Variables,param)
 
     𝓜r = (∂Arr./γtrr - (2/3)*∂K - (3/2)*Arr.*(∂χ./χ)./γtrr
      + (3/2)*Arr.*(∂γtθθ./γtθθ)./γtrr - Arr.*∂γtrr./(γtrr.^2)
-     - 8*pi.*γtrr.*Sr./χ)
+     - 8*pi*Sr)
 
     𝓖r = -(1/2)*∂γtrr./(γtrr.^2) + Γr + (∂γtθθ./γtθθ)./γtrr
 
-    # 𝓗[1:2] .= 0.
-    # 𝓜r[1:2] .= 0.
-    # 𝓖r[1:2] .= 0.
+    𝓗[1:2] .= 0.
+    𝓜r[1:2] .= 0.
+    𝓖r[1:2] .= 0.
 
     return (𝓗, 𝓜r, 𝓖r, ρ)
 
@@ -1024,8 +956,8 @@ function horizon(T,state::GBSSN_Variables,param)
     χ = state.χ
     γtrr = state.γtrr
     γtθθreg = state.γtθθ
-    Arrreg = state.Arr
-    Kreg = state.K
+    Arr = state.Arr
+    K = state.K
 
     # Gauge condition
 
@@ -1041,9 +973,9 @@ function horizon(T,state::GBSSN_Variables,param)
 
     γtθθ = (r.^2).*(γtθθreg .+ 1)
 
-    K = real((r .+ 0im).^(-3/2)).*Kreg
-
-    Arr = real((r .+ 0im).^(-5/2)).*Arrreg
+    # K = real((r .+ 0im).^(-3/2)).*Kreg
+    #
+    # Arr = real((r .+ 0im).^(-5/2)).*Arrreg
 
     # Intermediate calculations
 
@@ -1125,9 +1057,9 @@ function solution_saver(T,grid,sol,param,folder)
     # in the choosen data folder directory
     ###############################################
 
-    vars = (["α","A","βr","Br","χ","γtrr","γtθθ","Arr","K","Γreg","𝜙","K𝜙",
-    "H","Mr","Gr","ρ","∂tα","∂tβr","∂tBr","∂tχ","∂tγtrr","∂tγtθθ",
-    "∂tArr","∂tK","∂tΓreg","∂t𝜙","∂tK𝜙","appHorizon"])
+    vars = (["α","A","βr","Br","χ","γtrr","γtθθ","Arr","K","Γr","𝜙","K𝜙",
+    "∂tα","∂tA","∂tβr","∂tBr","∂tχ","∂tγtrr","∂tγtθθ","∂tArr","∂tK","∂tΓr","∂t𝜙","∂tK𝜙",
+    "H","Mr","Gr","ρ","appHorizon"])
     varlen = length(vars)
     #mkdir(string("data\\",folder))
     tlen = size(sol)[3]
@@ -1144,7 +1076,6 @@ function solution_saver(T,grid,sol,param,folder)
         apphorizon[i] = horizon(T,sol[i],param)
     end
 
-
     array = Array{T,2}(undef,tlen+1,rlen+1)
 
     array[1,1] = 0
@@ -1156,17 +1087,17 @@ function solution_saver(T,grid,sol,param,folder)
                 array[i,1] = sol.t[i-1]
                 array[i,2:end] .= sol[:,j,i-1]
             end
-        elseif j < 17
+        elseif j < 25
             for i = 2:tlen+1
                 array[i,1] = sol.t[i-1]
-                array[i,2:end] .= cons[i-1,j-12]
+                array[i,2:end] .= derivs[i-1][:,j-12]
             end
-        elseif j < 28
+        elseif j < 29
             for i = 2:tlen+1
                 array[i,1] = sol.t[i-1]
-                array[i,2:end] .= derivs[i-1][:,j-16]
+                array[i,2:end] .= cons[i-1,j-24]
             end
-        else
+        elseif j == varlen
             for i = 2:tlen+1
                 array[i,1] = sol.t[i-1]
                 array[i,2:end] .= apphorizon[i-1]
@@ -1210,7 +1141,7 @@ function main(points)
     drt = spacing(grid)
     dt = drt/4
 
-    tspan = T[0,12]
+    tspan = T[0,3]
     v = 1
 
     m = 0
@@ -1228,6 +1159,8 @@ function main(points)
     d2rdrt(rt) = 0
 
     atol = eps(T)^(T(3) / 4)
+
+    #alg = KuttaPRK2p5()
     alg = RK4()
 
     #printlogo()
@@ -1235,27 +1168,27 @@ function main(points)
     printtimes = 1
     custom_progress_step = round(Int, printtimes/dt)
     step_iterator = custom_progress_step
-    param = [step_iterator, custom_progress_step, v, r, drdrt, d2rdrt, m]
+    param = [step_iterator, custom_progress_step, v, r, drdrt, d2rdrt, m, rtspan]
     println("Defining Initial State...")
-    #state = init(T, grid, param)::GBSSN_Variables
+    state = init(T, grid, param)::GBSSN_Variables
     println("Defining Problem...")
-    #prob = ODEProblem(rhs, state, tspan, param)
+    prob = ODEProblem(rhs, state, tspan, param)
     println("Starting Solution...")
 
-    init(T, grid, param)
+    #init(T, grid, param)
 
-    # sol = solve(
-    #     prob, alg,
-    #     abstol = atol,
-    #     dt = drt/4,
-    #     adaptive = false,
-    #     saveat = 1,
-    #     progress = true,
-    #     progress_steps=custom_progress_step,
-    #     progress_message=custom_progress_message
-    # )
-    #
-    # solution_saver(T,grid,sol,param,"ScalarTests")
+    sol = solve(
+        prob, alg,
+        abstol = atol,
+        dt = drt/4,
+        adaptive = false,
+        saveat = 1,
+        progress = true,
+        progress_steps=custom_progress_step,
+        progress_message=custom_progress_message
+    )
+
+    solution_saver(T,grid,sol,param,"ScalarTests")
 
 end
 
