@@ -314,26 +314,36 @@ function deriv(f::GridFun{S,T}, order::Int=2, parity::Int=1) where {S,T}
         #      + (2/3)*f.values[5] - (1/12)*f.values[6]) / dx)
         # end
 
-        dvalues[1] = ((-25*f.values[1] + 48*f.values[2] - 36*f.values[3]
-            +16*f.values[4]-3*f.values[5])/(12*dx))
+        # dvalues[1] = ((-25*f.values[1] + 48*f.values[2] - 36*f.values[3]
+        #     +16*f.values[4]-3*f.values[5])/(12*dx))
+        #
+        # dvalues[2] = ((-3*f.values[1] - 10*f.values[2] + 18*f.values[3]
+        #     - 6*f.values[4] + f.values[5])/(12*dx))
 
-        dvalues[2] = ((-3*f.values[1] - 10*f.values[2] + 18*f.values[3]
-            - 6*f.values[4] + f.values[5])/(12*dx))
+        dvalues[3] = ((-48*f.values[3] + 59*f.values[4] - 8*f.values[5]
+         - 3*f.values[6])/(34*dx))
 
-        for i in 3:(n - 2)
+        dvalues[4] = ((-f.values[3] + f.values[5])/(2*dx))
+
+        dvalues[5] = ((8*f.values[3] - 59*f.values[4] + 59*f.values[6]
+            - 8*f.values[7])/(86*dx))
+
+        dvalues[6] = ((3*f.values[3] - 59*f.values[5] + 64*f.values[7]
+            - 8*f.values[8])/(98*dx))
+
+        for i in 7:(n - 2)
             dvalues[i] = (((1/12)*f.values[i - 2] - (2/3)*f.values[i - 1]
             + (2/3)*f.values[i + 1] - (1/12)*f.values[i + 2]) / dx)
         end
 
-        dvalues[n-1] = ((-f.values[n-4] + 6*f.values[n-3] - 18*f.values[n-2]
-        + 10*f.values[n-1] + 3*f.values[n])/(12*dx))
-
-        dvalues[n] = ((3*f.values[n-4] - 16*f.values[n-3] + 36*f.values[n-2]
-        - 48*f.values[n-1] + 25*f.values[n])/(12*dx))
+        # dvalues[n-3] = ((-f.values[n-6] + 6*f.values[n-5] - 18*f.values[n-4]
+        # + 10*f.values[n-3] + 3*f.values[n-2])/(12*dx))
+        #
+        # dvalues[n-2] = ((3*f.values[n-6] - 16*f.values[n-5] + 36*f.values[n-4]
+        # - 48*f.values[n-3] + 25*f.values[n-2])/(12*dx))
     end
-    #dvalues[1:2] .= 0.
-    #dvalues[1:2] .= -parity*dvalues[4:-1:3]
-    #dvalues[n-1:n] .= 0.
+    dvalues[1:2] .= 0.
+    dvalues[n-1:n] .= 0.
     return GridFun(f.grid, dvalues)
 end
 
@@ -376,27 +386,46 @@ function deriv2(f::GridFun{S,T}, order::Int=2, parity::Int=1) where {S,T}
         #     (5/2)*f.values[4] + (4/3)*f.values[5] - (1/12)*f.values[6])/
         #     (dx^2))
         # end
-        d2values[1] = ((45*f.values[1] - 154*f.values[2] + 214*f.values[3]
-            - 156*f.values[4] + 61*f.values[5] - 10*f.values[6])/(12*dx^2))
 
-        d2values[2] = ((10*f.values[1] - 15*f.values[2] - 4*f.values[3]
-            + 14*f.values[4] - 6*f.values[5] + 1*f.values[6])/(12*dx^2))
+        # d2values[1] = ((45*f.values[1] - 154*f.values[2] + 214*f.values[3]
+        #     - 156*f.values[4] + 61*f.values[5] - 10*f.values[6])/(12*dx^2))
+        #
+        # d2values[2] = ((10*f.values[1] - 15*f.values[2] - 4*f.values[3]
+        #     + 14*f.values[4] - 6*f.values[5] + 1*f.values[6])/(12*dx^2))
 
-        for i in 3:(n - 2)
+        # d2values[3] = ((11*f.values[2] - 20*f.values[3]
+        # + 6*f.values[4] + 4*f.values[5] - f.values[6])/(12*dx^2))
+        #
+        # d2values[4] = ((-(1/12)*f.values[2] + (4/3)*f.values[3] -
+        # (5/2)*f.values[4] + (4/3)*f.values[5] - (1/12)*f.values[6])/
+        # (dx^2))
+
+        d2values[3] = ((2*f.values[3] - 5*f.values[4] + 4*f.values[5]
+            - f.values[6])/(dx^2))
+
+        d2values[4] = ((f.values[3] - 2*f.values[4] + f.values[5])/(dx^2))
+
+        d2values[5] = ((-4*f.values[3] + 59*f.values[4] - 110*f.values[5]
+            + 59*f.values[6] - 4*f.values[7])/(43*dx^2))
+
+        d2values[6] = ((-f.values[3] + 59*f.values[5] - 118*f.values[6]
+            + 64*f.values[7] - 4*f.values[8])/(49*dx^2))
+
+        for i in 7:(n - 2)
             d2values[i] = ((-(1/12)*f.values[i - 2] + (4/3)*f.values[i - 1] -
             (5/2)*f.values[i] + (4/3)*f.values[i + 1] - (1/12)*f.values[i + 2])/
             (dx^2))
         end
 
-        d2values[n-1] = ((f.values[n-5] - 6*f.values[n-4] + 14*f.values[n-3]
-        - 4*f.values[n-2] - 15*f.values[n-1] + 10*f.values[n])/(12*dx^2))
-
-        d2values[n] = ((-10*f.values[n-5] + 61*f.values[n-4] - 156*f.values[n-3]
-        + 214*f.values[n-2] - 154*f.values[n-1] + 45*f.values[n])/(12*dx^2))
+        # d2values[n-3] = ((-f.values[n-6] + 4*f.values[n-5] + 6*f.values[n-4]
+        # - 20*f.values[n-3] + 11*f.values[n-2])/(12*dx^2))
+        #
+        # d2values[n-2] = ((11*f.values[n-6] - 56*f.values[n-5] + 114*f.values[n-4]
+        # - 104*f.values[n-3] + 35*f.values[n-2])/(12*dx^2))
     end
     #d2values[1:2] .= parity*d2values[4:-1:3]
-    #d2values[1:2] .= 0.
-    #d2values[n-1:n] .= 0.
+    d2values[1:2] .= 0.
+    d2values[n-1:n] .= 0.
     return GridFun(f.grid, d2values)
 end
 

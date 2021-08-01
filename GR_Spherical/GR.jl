@@ -163,52 +163,22 @@ function dissipation(f::GridFun{S,T}) where {S,T}
     n = f.grid.ncells + 4
     dvalues = Array{T}(undef, n)
 
-    # if f.values[2] == 0.
-    #     dvalues[3:6] .= ((f.values[3] - 6*f.values[4] + 15*f.values[5]
-    #     - 20*f.values[6] + 15*f.values[7] - 6*f.values[8] + f.values[9])/(dx^6))
-    # else
-    #     dvalues[3:6] .= ((f.values[2] - 6*f.values[3] + 15*f.values[4]
-    #     - 20*f.values[5] + 15*f.values[6] - 6*f.values[7] + f.values[8])/(dx^6))
-    # end
-    #
-    # for i in 7:(n - 5)
-    #     dvalues[i] =  ((f.values[i-3] - 6*f.values[i-2] + 15*f.values[i-1]
-    #     - 20*f.values[i] + 15*f.values[i+1] - 6*f.values[i+2] + f[i+3])/(dx^6))
-    # end
-    #
-    # dvalues[(n-4):(n-2)] .= ((f.values[n-8] - 6*f.values[n-7] + 15*f.values[n-6]
-    # - 20*f.values[n-5] + 15*f.values[n-4] - 6*f.values[n-3] + f.values[n-2])/(dx^6))
-
-    # if f.values[2] == 0.
-    #     for i in 3:4
-    #         dvalues[i] = ((f.values[i] - 4*f.values[i+1] + 6*f.values[i+2]
-    #         - 4*f.values[i+3] + f.values[i+4])/(dx^4))
-    #     end
-    # else
-    #     dvalues[3:4] .= ((f.values[2] - 4*f.values[3] + 6*f.values[4]
-    #     - 4*f.values[5] + f.values[6])/(dx^4))
-    # end
-
-    # dvalues[1:4] .= 0.
-    # # dvalues[3] = ((6*f.values[1] + 15*f.values[2]
-    # # - 20*f.values[3] + 15*f.values[4] - 6*f.values[5]
-    # # + f.values[6])/(dx^6))
-    #
-    # for i in 3:3
-    #     dvalues[i] = ((f.values[i-2] - 4*f.values[i-1] + 6*f.values[i]
-    #     - 4*f.values[i+1] + f.values[i+2])/(dx^4))
-    # end
-    # for i in 4:(n - 5)
-    #     dvalues[i] = ((-f.values[i-3] + 12*f.values[i-2] -39*f.values[i-1]
-    #     + 56*f.values[i] - 39*f.values[i+1] + 12*f.values[i+2]
-    #     - f.values[i+3])/(dx^4))
-    # end
-    # dvalues[(n-4):n] .= 0.
-
     dvalues[1:2] .= 0.
-    for i in 3:(n - 4)
-        dvalues[i] = ((f.values[i-2] - 4*f.values[i-1] + 6*f.values[i]
-        - 4*f.values[i+1] + f.values[i+2])/(dx^4))
+
+    dvalues[3] = -((-48*f.values[3] + 96*f.values[4] - 48*f.values[5])/17)
+
+    dvalues[4] = -((96*f.values[3] - 240*f.values[4] + 192*f.values[5]
+        - 48*f.values[6])/59)
+
+    dvalues[5] = -((-48*f.values[3] + 192*f.values[4] - 288*f.values[5]
+        + 192*f.values[6] - 48*f.values[7])/43)
+
+    dvalues[6] = -((-48*f.values[4] + 192*f.values[5] - 288*f.values[6]
+        + 192*f.values[7] - 48*f.values[8])/49)
+
+    for i in 7:(n - 4)
+        dvalues[i] = (f.values[i-2] - 4*f.values[i-1] + 6*f.values[i]
+        - 4*f.values[i+1] + f.values[i+2])
     end
     dvalues[(n-3):n] .= 0.
 
@@ -256,7 +226,7 @@ function init(::Type{T}, grid::Grid, param) where {T}
     r0 = 10.
     σr = 0.5
     #Amp = 1.
-    Amp = 0*0.05
+    Amp = 0*0.1
 
     f𝜙(rt) = Amp*(1/r(rt))*exp(-(1/2)*((r(rt)-r0)/σr)^2)
     f∂𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r(rt)*r0-r(rt)^2-σr^2)/(r(rt)^2*σr^2)
@@ -505,12 +475,20 @@ function rhs(state::GBSSN_Variables, param, t)
     ∂rtK𝜙 = deriv(K𝜙,order,-1)
 
     # Second derivatives
-    ∂2rtα = deriv2(α,order,1)
-    ∂2rtβr = deriv2(βr,order,-1)
-    ∂2rtχ = deriv2(χ,order,1)
-    ∂2rtγtrr = deriv2(γtrr,order,1)
-    ∂2rtγtθθreg = deriv2(γtθθreg,order,1)
-    ∂2rt𝜙 = deriv2(𝜙,order,1)
+
+    # ∂2rtα = deriv2(α,order,1)
+    # ∂2rtβr = deriv2(βr,order,-1)
+    # ∂2rtχ = deriv2(χ,order,1)
+    # ∂2rtγtrr = deriv2(γtrr,order,1)
+    # ∂2rtγtθθreg = deriv2(γtθθreg,order,1)
+    # ∂2rt𝜙 = deriv2(𝜙,order,1)
+
+    ∂2rtα = deriv(∂rtα,order,1)
+    ∂2rtβr = deriv(∂rtβr,order,-1)
+    ∂2rtχ = deriv(∂rtχ,order,1)
+    ∂2rtγtrr = deriv(∂rtγtrr,order,1)
+    ∂2rtγtθθreg = deriv(∂rtγtθθreg,order,1)
+    ∂2rt𝜙 = deriv(∂rt𝜙,order,1)
 
     # Coordinate transformations from computational rt coordinate
     # to physical r coordinate
@@ -716,7 +694,7 @@ function rhs(state::GBSSN_Variables, param, t)
 
     #sign = -1 seems the best
     sign = -1
-    σ = 0.3
+    σ = 0.2
 
     # ∂tα .+= (1/(2^6))*sign*σ*(drt^5)*∂6α
     # ∂tβr .+= (1/(2^6))*sign*σ*(drt^5)*∂6βr
@@ -728,33 +706,54 @@ function rhs(state::GBSSN_Variables, param, t)
     # ∂tK .+= (1/(2^6))*sign*σ*(drt^5)*∂6K
     # ∂tΓreg .+= (1/(2^6))*sign*σ*(drt^5)*∂6Γreg
 
-    ∂tα .+= (1/(16))*sign*σ*(drt^3)*∂4α
-    ∂tA .+= (1/(16))*sign*σ*(drt^3)*∂4A
-    ∂tβr .+= (1/16)*sign*σ*(drt^3)*∂4βr
-    ∂tBr .+= (1/16)*sign*σ*(drt^3)*∂4Br
-    ∂tχ .+= (1/16)*sign*σ*(drt^3)*∂4χ
-    ∂tγtrr .+= (1/16)*sign*σ*(drt^3)*∂4γtrr
-    ∂tγtθθreg .+= (1/16)*sign*σ*(drt^3)*∂4γtθθreg
-    ∂tArr .+= (1/16)*sign*σ*(drt^3)*∂4Arr
-    ∂tK .+= (1/16)*sign*σ*(drt^3)*∂4K
-    ∂tΓr .+= (1/16)*sign*σ*(drt^3)*∂4Γr
-    ∂t𝜙 .+= (1/16)*sign*σ*(drt^3)*∂4𝜙
-    ∂tK𝜙 .+= (1/16)*sign*σ*(drt^3)*∂4K𝜙
+    ∂tα .+= (1/16)*sign*σ*∂4α
+    ∂tA .+= (1/16)*sign*σ*∂4A
+    ∂tβr .+= (1/16)*sign*σ*∂4βr
+    ∂tBr .+= (1/16)*sign*σ*∂4Br
+    ∂tχ .+= (1/16)*sign*σ*∂4χ
+    ∂tγtrr .+= (1/16)*sign*σ*∂4γtrr
+    ∂tγtθθreg .+= (1/16)*sign*σ*∂4γtθθreg
+    ∂tArr .+= (1/16)*sign*σ*∂4Arr
+    ∂tK .+= (1/16)*sign*σ*∂4K
+    ∂tΓr .+= (1/16)*sign*σ*∂4Γr
+    ∂t𝜙 .+= (1/16)*sign*σ*∂4𝜙
+    ∂tK𝜙 .+= (1/16)*sign*σ*∂4K𝜙
 
     # Inner temporal boundary Conditions
 
-    ∂tα[1:2] .= ∂α[1:2]
-    ∂tA[1:2] .= ∂A[1:2]
-    ∂tβr[1:2] .= ∂βr[1:2]
-    ∂tBr[1:2] .= ∂Br[1:2]
-    ∂tχ[1:2] .= ∂χ[1:2]
-    ∂tγtrr[1:2] .= ∂γtrr[1:2]
-    ∂tγtθθreg[1:2] .= ∂γtθθreg[1:2]
-    ∂tArr[1:2] .= ∂Arr[1:2]
-    ∂tK[1:2] .= ∂K[1:2]
-    ∂tΓr[1:2] .= ∂Γr[1:2]
-    ∂t𝜙[1:2] .= ∂𝜙[1:2]
-    ∂tK𝜙[1:2] .= ∂K𝜙[1:2]
+    ∂tα[1:2] .= 0
+    ∂tA[1:2] .= 0
+    ∂tβr[1:2] .= 0
+    ∂tBr[1:2] .= 0
+    ∂tχ[1:2] .= 0
+    ∂tγtrr[1:2] .= 0
+    ∂tγtθθreg[1:2] .= 0
+    ∂tArr[1:2] .= 0
+    ∂tK[1:2] .= 0
+    ∂tΓr[1:2] .= 0
+    ∂t𝜙[1:2] .= 0
+    ∂tK𝜙[1:2] .= 0
+
+    # ∂tα[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tA[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tβr[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tBr[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tχ[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tγtrr[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tγtθθreg[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tArr[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tK[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tΓr[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂t𝜙[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    # ∂tK𝜙[1] = ((-25*∂tα[1]+48*∂tα[2]-36*∂tα[3]+16*∂tα[4]-3*∂tα[5])/(12*drt))
+    #
+    #
+    #
+    # dvalues[1] = ((-25*f.values[1] + 48*f.values[2] - 36*f.values[3]
+    #     +16*f.values[4]-3*f.values[5])/(12*dx))
+    #
+    # dvalues[2] = ((-3*f.values[1] - 10*f.values[2] + 18*f.values[3]
+    #     - 6*f.values[4] + f.values[5])/(12*dx))
 
 
     # Outer temporal boundary conditions
@@ -1141,7 +1140,7 @@ function main(points)
     drt = spacing(grid)
     dt = drt/4
 
-    tspan = T[0,3]
+    tspan = T[0,5]
     v = 1
 
     m = 0
