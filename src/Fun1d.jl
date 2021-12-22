@@ -120,20 +120,6 @@ end
 Base.similar(f::GridFun, ::Dims) = similar(f)
 Base.similar(f::GridFun, ::Dims, ::Type{T}) where {T} = similar(f, T)
 
-# Broadcasting
-Base.BroadcastStyle(::Type{<:GridFun}) = Broadcast.ArrayStyle{GridFun}()
-function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{GridFun}},
-                      ::Type{T}) where {T}
-    f = find_gridfun(bc)
-    return similar(f, T)
-end
-find_gridfun(bc::Base.Broadcast.Broadcasted) = find_gridfun(bc.args)
-find_gridfun(args::Tuple) = find_gridfun(find_gridfun(args[1]), Base.tail(args))
-find_gridfun(x) = x
-find_gridfun(::Tuple{}) = nothing
-find_gridfun(a::GridFun, rest) = a
-find_gridfun(::Any, rest) = find_gridfun(rest)
-
 # Others
 function Base.map(fun, f::GridFun, gs::GridFun...)
     @assert all(g.grid == f.grid for g in gs)
@@ -158,6 +144,26 @@ Base.iszero(f::GridFun) = all(iszero, f.values)
 Base.:+(f::GridFun) = GridFun(f.grid, +f.values)
 Base.:-(f::GridFun) = GridFun(f.grid, -f.values)
 
+Base.:*(f::GridFun, a::Number) = GridFun(f.grid, f.values * a)
+Base.:*(a::Number, f::GridFun) = GridFun(f.grid, a * f.values)
+Base.:/(f::GridFun, a::Number) = GridFun(f.grid, f.values / a)
+Base.:\(a::Number, f::GridFun) = GridFun(f.grid, a \ f.values)
+
+#Broadcasting
+Base.BroadcastStyle(::Type{<:GridFun}) = Broadcast.ArrayStyle{GridFun}()
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.ArrayStyle{GridFun}},
+                      ::Type{T}) where {T}
+    return similar(find_gridfun(bc), T)
+end
+find_gridfun(bc::Base.Broadcast.Broadcasted) = find_gridfun(bc.args)
+find_gridfun(args::Tuple) = find_gridfun(find_gridfun(args[1]), Base.tail(args))
+find_gridfun(x) = x
+find_gridfun(::Tuple{}) = nothing
+find_gridfun(a::GridFun, rest) = a
+find_gridfun(::Any, rest) = find_gridfun(rest)
+
+#Broadcasting
+
 function Base.:+(f::GridFun, g::GridFun)
     @assert f.grid == g.grid
     return GridFun(f.grid, f.values + g.values)
@@ -166,20 +172,27 @@ function Base.:-(f::GridFun, g::GridFun)
     @assert f.grid == g.grid
     return GridFun(f.grid, f.values - g.values)
 end
-
+#
 # function Base.:*(f::GridFun, g::GridFun)
 #     @assert f.grid == g.grid
-#     return GridFun(f.grid, f.values.*g.values)
+#     return GridFun(f.grid, f.values * g.values)
 # end
+#
 # function Base.:/(f::GridFun, g::GridFun)
 #     @assert f.grid == g.grid
-#     return GridFun(f.grid, f.values./g.values)
+#     return GridFun(f.grid, f.values / g.values)
 # end
 
-Base.:*(f::GridFun, a::Number) = GridFun(f.grid, f.values * a)
-Base.:*(a::Number, f::GridFun) = GridFun(f.grid, a * f.values)
-Base.:/(f::GridFun, a::Number) = GridFun(f.grid, f.values / a)
-Base.:\(a::Number, f::GridFun) = GridFun(f.grid, a \ f.values)
+# function Base.materialize!(A::GridFun, bc::Base.Broadcast.Broadcasted)
+#
+#     println("copy")
+#
+#     B = find_gridfun(bc)
+#
+#     A.values .= B.values
+#
+#     return A
+# end
 
 ################################################################################
 
@@ -197,9 +210,9 @@ export sample
 Sample a function at grid points
 """
 function sample(::Type{T}, grid::Grid{S}, fun) where {S,T}
-    #values = Array{T}(undef, grid.ncells + 4)
+
     values = T[fun(location(grid, n)) for n in 1:(grid.ncells + 4)]
-    #values[1:2] .= 0.
+
     return GridFun(grid, values)
 end
 
@@ -278,14 +291,13 @@ norm2(f::GridFun) = sqrt(integrate(map(abs2, f)))
 
 #function LinearAlgebra.norm(f::GridFun{S,T})where{S,T}
 
-export deriv
+export deriv!
 """
 Derivative of a grid function
 """
-function deriv(f::GridFun{S,T}, order::Int=2, parity::Int=1) where {S,T}
+function deriv!(df::GridFun{S,T},f::GridFun{S,T},order::Int=2) where {S,T}
     dx = spacing(f.grid)
     n = f.grid.ncells + 4
-    dvalues = Array{T}(undef, n)
     if order == 2
         if f.values[2] == 0.
             dvalues[3] = (-3*f.values[3] + 4*f.values[4] - f.values[5])/(2*dx)
@@ -299,52 +311,65 @@ function deriv(f::GridFun{S,T}, order::Int=2, parity::Int=1) where {S,T}
             dvalues[i] = (f.values[i-2] - 4*f.values[i-1] + 3*f.values[i])/(2*dx)
         end
     elseif order == 4
-        # if f.values[2] == 0.
-        #     dvalues[3] = ((-(25/12)*f.values[3] + 4*f.values[4]
-        #     - 3*f.values[5] + (4/3)*f.values[6]
-        #     - (1/4)*f.values[7]) / dx)
+
+        # dvalues[3] = ((-48*f.values[3] + 59*f.values[4] - 8*f.values[5]
+        #  - 3*f.values[6])/(34*dx))
         #
-        #     dvalues[4] = ((-3*f.values[3] - 10*f.values[4] + 18*f.values[5]
-        #     - 6*f.values[6] + f.values[7])/(12*dx))
-        # else
-        #     dvalues[3] = ((-3*f.values[2] - 10*f.values[3] + 18*f.values[4]
-        #      - 6*f.values[5] + f.values[6])/(12*dx))
+        # dvalues[4] = ((-f.values[3] + f.values[5])/(2*dx))
         #
-        #      dvalues[4] = (((1/12)*f.values[2] - (2/3)*f.values[3]
-        #      + (2/3)*f.values[5] - (1/12)*f.values[6]) / dx)
-        # end
-
-        # dvalues[1] = ((-25*f.values[1] + 48*f.values[2] - 36*f.values[3]
-        #     +16*f.values[4]-3*f.values[5])/(12*dx))
+        # dvalues[5] = ((8*f.values[3] - 59*f.values[4] + 59*f.values[6]
+        #     - 8*f.values[7])/(86*dx))
         #
-        # dvalues[2] = ((-3*f.values[1] - 10*f.values[2] + 18*f.values[3]
-        #     - 6*f.values[4] + f.values[5])/(12*dx))
+        # dvalues[6] = ((3*f.values[3] - 59*f.values[5] + 64*f.values[7]
+        #     - 8*f.values[8])/(98*dx))
 
-        dvalues[3] = ((-48*f.values[3] + 59*f.values[4] - 8*f.values[5]
-         - 3*f.values[6])/(34*dx))
+        # dvalues[1:2] .= 0.
 
-        dvalues[4] = ((-f.values[3] + f.values[5])/(2*dx))
+        df.values[1] = ((-25*f.values[1] + 48*f.values[2] - 36*f.values[3]
+            + 16*f.values[4] - 3*f.values[5])/(12*dx))
 
-        dvalues[5] = ((8*f.values[3] - 59*f.values[4] + 59*f.values[6]
-            - 8*f.values[7])/(86*dx))
+        df.values[2] = ((-3*f.values[1] - 10*f.values[2] + 18*f.values[3]
+        - 6*f.values[4] + f.values[5])/(12*dx))
 
-        dvalues[6] = ((3*f.values[3] - 59*f.values[5] + 64*f.values[7]
-            - 8*f.values[8])/(98*dx))
-
-        for i in 7:(n - 2)
-            dvalues[i] = (((1/12)*f.values[i - 2] - (2/3)*f.values[i - 1]
-            + (2/3)*f.values[i + 1] - (1/12)*f.values[i + 2]) / dx)
+        for i in 3:(n - 2)
+            df.values[i] = ((f.values[i - 2] - 8*f.values[i - 1]
+            + 8*f.values[i + 1] - f.values[i + 2])/(12*dx))
         end
 
-        # dvalues[n-3] = ((-f.values[n-6] + 6*f.values[n-5] - 18*f.values[n-4]
-        # + 10*f.values[n-3] + 3*f.values[n-2])/(12*dx))
+        df.values[n-1] = -((-3*f.values[n] - 10*f.values[n-1] + 18*f.values[n-2]
+         - 6*f.values[n-3] + f.values[n-4])/(12*dx))
+
+        df.values[n] = -((-25*f.values[n] + 48*f.values[n-1] - 36*f.values[n-2]
+         + 16*f.values[n-3] - 3*f.values[n-4])/(12*dx))
+
+        # if f.values[2] == 0.
+        #     dvalues[3] = ((-25*f.values[3] + 48*f.values[4] - 36*f.values[5]
+        #      + 16*f.values[6] - 3*f.values[7])/(12*dx))
         #
-        # dvalues[n-2] = ((3*f.values[n-6] - 16*f.values[n-5] + 36*f.values[n-4]
-        # - 48*f.values[n-3] + 25*f.values[n-2])/(12*dx))
+        #     dvalues[4] = ((-3*f.values[3] - 10*f.values[4] + 18*f.values[5]
+        #      - 6*f.values[6] + f.values[7])/(12*dx))
+        # else
+        #      dvalues[3] = ((-3*f.values[2] - 10*f.values[3] + 18*f.values[4]
+        #       - 6*f.values[5] + f.values[6])/(12*dx))
+        # end
+
+        # dvalues[n-5] = -((3*f.values[n-2] - 59*f.values[n-4] + 64*f.values[n-6]
+        #   - 8*f.values[n-7])/(98*dx))
+        #
+        # dvalues[n-4] = -((8*f.values[n-2] - 59*f.values[n-3] + 59*f.values[n-5]
+        #   - 8*f.values[n-6])/(86*dx))
+        #
+        # dvalues[n-3] = -((-f.values[n-2] + f.values[n-4])/(2*dx))
+        #
+        # dvalues[n-2] = -((-48*f.values[n-2] + 59*f.values[n-3] - 8*f.values[n-4]
+        #   - 3*f.values[n-5])/(34*dx))
+
+
     end
-    dvalues[1:2] .= 0.
-    dvalues[n-1:n] .= 0.
-    return GridFun(f.grid, dvalues)
+    #dvalues[1:2] .= 0.
+    #dvalues[n-1:n] .= 0.
+    #return GridFun(f.grid, dvalues)
+    #return
 end
 
 export deriv2
@@ -372,56 +397,36 @@ function deriv2(f::GridFun{S,T}, order::Int=2, parity::Int=1) where {S,T}
             - 5*f.values[i-1] + 2*f.values[i])/(dx^2))
         end
     elseif order == 4
-        # if f.values[2] == 0.
-        #     d2values[3] = ((45*f.values[3] - 154*f.values[4] + 214*f.values[5]
-        #     - 156*f.values[6] + 61*f.values[7] - 10*f.values[8])/(12*dx^2))
+
+        # d2values[3] = ((45*f.values[3] - 154*f.values[4] + 214*f.values[5]
+        #  - 156*f.values[6] + 61*f.values[7] - 10*f.values[8])/(12*dx^2))
         #
-        #     d2values[4] = ((10*f.values[3] - 15*f.values[4] - 4*f.values[5]
-        #     + 14*f.values[6] - 6*f.values[7] + f.values[8])/(12*dx^2))
-        # else
-        #     d2values[3] = ((11*f.values[2] - 20*f.values[3]
-        #     + 6*f.values[4] + 4*f.values[5] - f.values[6])/(12*dx^2))
-        #
-        #     d2values[4] = ((-(1/12)*f.values[2] + (4/3)*f.values[3] -
-        #     (5/2)*f.values[4] + (4/3)*f.values[5] - (1/12)*f.values[6])/
-        #     (dx^2))
-        # end
+        # d2values[4] = ((10*f.values[3] - 15*f.values[4] - 4*f.values[5]
+        #  + 14*f.values[6] - 6*f.values[7] + f.values[8])/(12*dx^2))
 
-        # d2values[1] = ((45*f.values[1] - 154*f.values[2] + 214*f.values[3]
-        #     - 156*f.values[4] + 61*f.values[5] - 10*f.values[6])/(12*dx^2))
-        #
-        # d2values[2] = ((10*f.values[1] - 15*f.values[2] - 4*f.values[3]
-        #     + 14*f.values[4] - 6*f.values[5] + 1*f.values[6])/(12*dx^2))
-
-        # d2values[3] = ((11*f.values[2] - 20*f.values[3]
-        # + 6*f.values[4] + 4*f.values[5] - f.values[6])/(12*dx^2))
-        #
-        # d2values[4] = ((-(1/12)*f.values[2] + (4/3)*f.values[3] -
-        # (5/2)*f.values[4] + (4/3)*f.values[5] - (1/12)*f.values[6])/
-        # (dx^2))
-
-        d2values[3] = ((2*f.values[3] - 5*f.values[4] + 4*f.values[5]
-            - f.values[6])/(dx^2))
-
-        d2values[4] = ((f.values[3] - 2*f.values[4] + f.values[5])/(dx^2))
-
-        d2values[5] = ((-4*f.values[3] + 59*f.values[4] - 110*f.values[5]
-            + 59*f.values[6] - 4*f.values[7])/(43*dx^2))
-
-        d2values[6] = ((-f.values[3] + 59*f.values[5] - 118*f.values[6]
-            + 64*f.values[7] - 4*f.values[8])/(49*dx^2))
-
-        for i in 7:(n - 2)
+        for i in 4:(n - 4)
             d2values[i] = ((-(1/12)*f.values[i - 2] + (4/3)*f.values[i - 1] -
             (5/2)*f.values[i] + (4/3)*f.values[i + 1] - (1/12)*f.values[i + 2])/
             (dx^2))
         end
 
-        # d2values[n-3] = ((-f.values[n-6] + 4*f.values[n-5] + 6*f.values[n-4]
-        # - 20*f.values[n-3] + 11*f.values[n-2])/(12*dx^2))
-        #
-        # d2values[n-2] = ((11*f.values[n-6] - 56*f.values[n-5] + 114*f.values[n-4]
-        # - 104*f.values[n-3] + 35*f.values[n-2])/(12*dx^2))
+        if f.values[2] == 0.
+            d2values[3] = ((45*f.values[3] - 154*f.values[4] + 214*f.values[5]
+             - 156*f.values[6] + 61*f.values[7] - 10*f.values[8])/(12*dx^2))
+
+            d2values[4] = ((10*f.values[3] - 15*f.values[4] - 4*f.values[5]
+             + 14*f.values[6] - 6*f.values[7] + f.values[8])/(12*dx^2))
+        else
+             d2values[3] = ((10*f.values[2] - 15*f.values[3] - 4*f.values[4]
+              + 14*f.values[5] - 6*f.values[6] + f.values[7])/(12*dx^2))
+        end
+
+        d2values[n-3] = ((10*f.values[n-2] - 15*f.values[n-3] - 4*f.values[n-4]
+         + 14*f.values[n-5] - 6*f.values[n-6] + f.values[n-7])/(12*dx^2))
+
+        d2values[n-2] = ((45*f.values[n-2] - 154*f.values[n-3] + 214*f.values[n-4]
+         - 156*f.values[n-5] + 61*f.values[n-6] - 10*f.values[n-7])/(12*dx^2))
+
     end
     #d2values[1:2] .= parity*d2values[4:-1:3]
     d2values[1:2] .= 0.

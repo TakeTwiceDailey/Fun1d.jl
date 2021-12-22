@@ -125,9 +125,9 @@ end
 
 ################################################################################
 
-function setup_sphere(::Type{S}) where {S}
+function setup_sphere(::Type{S},points) where {S}
     domain = Domain{S}(0, 5)
-    grid = Grid(domain, 100)
+    grid = Grid(domain, points)
     return grid
 end
 
@@ -166,9 +166,9 @@ function rhs_sphere(state::Wave, param, t)
     return staterhs::Wave
 end
 
-function main_sphere()
+function main_sphere(points)
     T = Float64
-    grid = setup_sphere(T)
+    grid = setup_sphere(T,points)
     t0 = T(0)
     state = init_sphere(T, grid, t0)::Wave
     t1 = T(3)
