@@ -3,7 +3,7 @@ module GR_Spherical
 using DifferentialEquations
 using BoundaryValueDiffEq
 using OrdinaryDiffEq
-using Fun1d
+#using Fun1d
 using DataFrames
 using CSV
 using Plots
@@ -17,6 +17,20 @@ using LinearAlgebra
 
 using Profile
 
+numvar = 13
+
+VarContainer{T} = ArrayPartition{T, NTuple{numvar, Vector{T}}}
+
+struct Domain{S}
+    xmin::S
+    xmax::S
+end
+
+struct Grid{S}
+    domain::Domain{S}
+    ncells::Int
+end
+
 struct Param{T}
     rtmin::T
     rtmax::T
@@ -29,23 +43,16 @@ struct Param{T}
     rsamp::Vector{T}
     drdrtsamp::Vector{T}
     d2rdrtsamp::Vector{T}
-    state::ArrayPartition{T, NTuple{12, Vector{T}}}
-    drstate::ArrayPartition{T, NTuple{12, Vector{T}}}
-    dr2state::ArrayPartition{T, NTuple{12, Vector{T}}}
-    dtstate::ArrayPartition{T, NTuple{12, Vector{T}}}
-    dissipation::ArrayPartition{T, NTuple{12, Vector{T}}}
-    temp::ArrayPartition{T, NTuple{12, Vector{T}}}
+    state::VarContainer{T}
+    drstate::VarContainer{T}
+    dr2state::VarContainer{T}
+    dtstate::VarContainer{T}
+    dissipation::VarContainer{T}
+    temp::VarContainer{T}
 end
 
-numvar = 12
-
 @inline function Base.similar(::Type{ArrayPartition},::Type{T},size::Int) where T
-    return ArrayPartition(
-        similar(Vector{T}(undef,size)),similar(Vector{T}(undef,size)),similar(Vector{T}(undef,size)),
-        similar(Vector{T}(undef,size)),similar(Vector{T}(undef,size)),similar(Vector{T}(undef,size)),
-        similar(Vector{T}(undef,size)),similar(Vector{T}(undef,size)),similar(Vector{T}(undef,size)),
-        similar(Vector{T}(undef,size)),similar(Vector{T}(undef,size)),similar(Vector{T}(undef,size))
-    )
+    return ArrayPartition([similar(Vector{T}(undef,size)) for i=1:numvar]...)::VarContainer{T}
 end
 
 function printlogo()
@@ -68,19 +75,24 @@ function printlogo()
 
 end
 
+spacing(grid::Grid) = (grid.domain.xmax - grid.domain.xmin) / (grid.ncells + 1)
+
 function sample!(f::Vector{T}, grid::Grid{S}, fun) where {S,T}
 
-    f .= T[fun(location(grid, n)) for n in 1:(grid.ncells + 4)]
+    drt = spacing(grid)
+    rtmin = grid.domain.xmin
+
+    f .= T[fun(rtmin + drt*(n-1)) for n in 1:(grid.ncells + 2)]
 
 end
 
-function init!(state::ArrayPartition, param) where T
+function init!(state::VarContainer{T}, param) where T
 
     ############################################
     # Specifies the Initial Conditions
     ############################################
 
-    αreg,A,βr,Br,χ,γtrrreg,γtθθreg,Arrreg,Kreg,Γr,𝜙,K𝜙 = state.x
+    αreg,A,βr,Br,χ,γtrrreg,γtθθreg,Arrreg,Kreg,Γr,𝜙,K𝜙,p = state.x
 
     grid = param.grid
     drt = spacing(grid)
@@ -90,7 +102,7 @@ function init!(state::ArrayPartition, param) where T
     rtmin = param.rtmin
     rtmax = param.rtmax
 
-    n = grid.ncells + 4
+    n = grid.ncells + 2
     m = 1.
     rtspan = (rtmin,rtmax)
 
@@ -113,7 +125,7 @@ function init!(state::ArrayPartition, param) where T
     r0 = 10.
     σr = 0.5
     #Amp = 1.
-    Amp = 0.
+    Amp = 0.01
 
     f𝜙(rt) = Amp*(1/r(rt))*exp(-(1/2)*((r(rt)-r0)/σr)^2)
     f∂𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r(rt)*r0-r(rt)^2-σr^2)/(r(rt)^2*σr^2)
@@ -156,18 +168,47 @@ function init!(state::ArrayPartition, param) where T
 
     ∂M(rt) = f∂M(M(rt),rt)
 
-    sample!(αreg, grid, rt -> fαreg(M(rt),rt) )
+    # sample!(αreg, grid, rt -> fαreg(M(rt),rt) )
+    # sample!(A, grid, fA)
+    # sample!(βr, grid, rt -> fβr(M(rt),rt) )
+    # sample!(Br, grid, fBr)
+    # sample!(χ, grid, fχ)
+    # sample!(γtrrreg, grid, rt -> fγtrrreg(M(rt),rt) )
+    # sample!(γtθθreg, grid, rt -> 0)
+    # sample!(Arrreg, grid, rt -> fArrreg(M(rt),∂M(rt),rt) )
+    # sample!(Kreg, grid, rt -> fKreg(M(rt),∂M(rt),rt) )
+    # sample!(Γr, grid, rt -> fΓr(M(rt),∂M(rt),rt))
+    # sample!(𝜙, grid, f𝜙)
+    # sample!(K𝜙, grid, fK𝜙)
+    # sample!(p, grid, rt -> 0)
+
+    sample!(αreg, grid, rt -> fαreg(1,rt) )
     sample!(A, grid, fA)
-    sample!(βr, grid, rt -> fβr(M(rt),rt) )
+    sample!(βr, grid, rt -> fβr(1,rt) )
     sample!(Br, grid, fBr)
     sample!(χ, grid, fχ)
-    sample!(γtrrreg, grid, rt -> fγtrrreg(M(rt),rt) )
+    sample!(γtrrreg, grid, rt -> fγtrrreg(1,rt) )
     sample!(γtθθreg, grid, rt -> 0)
-    sample!(Arrreg, grid, rt -> fArrreg(M(rt),∂M(rt),rt) )
-    sample!(Kreg, grid, rt -> fKreg(M(rt),∂M(rt),rt) )
-    sample!(Γr, grid, rt -> fΓr(M(rt),∂M(rt),rt))
+    sample!(Arrreg, grid, rt -> fArrreg(1,0,rt) )
+    sample!(Kreg, grid, rt -> fKreg(1,0,rt) )
+    sample!(Γr, grid, rt -> fΓr(1,0,rt))
     sample!(𝜙, grid, f𝜙)
     sample!(K𝜙, grid, fK𝜙)
+    sample!(p, grid, rt -> 0)
+
+    # sample!(αreg, grid, rt -> 0 )
+    # sample!(A, grid, fA)
+    # sample!(βr, grid, rt -> 0 )
+    # sample!(Br, grid, fBr)
+    # sample!(χ, grid, fχ)
+    # sample!(γtrrreg, grid, rt -> 0 )
+    # sample!(γtθθreg, grid, rt -> 0)
+    # sample!(Arrreg, grid, rt -> 0 )
+    # sample!(Kreg, grid, rt -> 0 )
+    # sample!(Γr, grid, rt -> -2/r(rt))
+    # sample!(𝜙, grid, f𝜙)
+    # sample!(K𝜙, grid, fK𝜙)
+    # sample!(p, grid, rt -> 0)
 
 end
 
@@ -189,6 +230,24 @@ end
 
 end
 
+@inline function deriv2!(df::Vector{T}, f::Vector{T}, n::Int64, dx::T) where T
+
+    # @inbounds @fastmath @simd
+
+    df[1] = T((45. *f[1] - 154. *f[2] + 214. *f[3] - 156. *f[4] + 61. *f[5] - 10. *f[6])/(12. *dx^2))
+
+    df[2] = T((10. *f[1] - 15. *f[2] - 4. *f[3] + 14. *f[4] - 6. *f[5] + f[6])/(12. *dx^2))
+
+    for i in 3:(n - 2)
+        df[i] = T(((-f[i-2] + 16. *f[i-1] - 30. *f[i+0] + 16. *f[i+1] - f[i+2])/(12. *dx^2)))
+    end
+
+    df[n-1] = T((10. *f[n] - 15. *f[n-1] - 4. *f[n-2] + 14. *f[n-3] - 6. *f[n-4] + f[n-5])/(12. *dx^2))
+
+    df[n] = T((45. *f[n] - 154. *f[n-1] + 214. *f[n-2] - 156. *f[n-3] + 61. *f[n-4] - 10. *f[n-5])/(12. *dx^2))
+
+end
+
 @inline function dissipation!(df::Vector{T}, f::Vector{T},drdrt::Vector{T}, n::Int64) where T
 
     ############################################
@@ -205,6 +264,10 @@ end
 
     # @simd @inbounds @fastmath
 
+    # df[1] = (f[1] - 4. *f[2] + 6. *f[3] - 4. *f[4] + f[5])/(drdrt[1])
+    #
+    # df[2] = (f[1] - 4. *f[2] + 6. *f[3] - 4. *f[4] + f[5])/(drdrt[2])
+
     df[1:2] .= 0.
 
     for i in 3:(n - 2)
@@ -216,7 +279,7 @@ end
 
 end
 
-function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::ArrayPartition{T, NTuple{12, Vector{T}}}, param::Param{T}, t) where T
+function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T}, t) where T
 
     ############################################
     # Caculates the right hand ride of the
@@ -235,7 +298,7 @@ function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::Ar
 
     # Unpack the parameters
 
-    m = 1.
+    m = 0.
     Mtot = 1.
 
     grid = param.grid
@@ -253,7 +316,7 @@ function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::Ar
     dtstate2 = param.dtstate
     temp = param.temp
 
-    n = grid.ncells + 4
+    n = grid.ncells + 2
 
     # Copy the state into the parameters
     # so that it can be changed
@@ -266,17 +329,26 @@ function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::Ar
     #
     # This results in an intense slowdown
     # Do instead:
-    for i in 1:12
+    for i in 1:numvar
         state.x[i] .= regstate.x[i]
     end
 
     # Give names to individual variables
 
-    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙 = state.x
-    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γr,∂𝜙,∂K𝜙 = drstate.x
-    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γr,∂2𝜙,∂2K𝜙 = dr2state.x
-    ∂tα,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrr,∂tγtθθ,∂tArr,∂tK,∂tΓr,∂t𝜙,∂tK𝜙 = dtstate.x
-    ∂4α,∂4A,∂4βr,∂4Br,∂4χ,∂4γtrr,∂4γtθθ,∂4Arr,∂4K,∂4Γr,∂4𝜙,∂4K𝜙 = dissipation.x
+    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙,E = state.x
+    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γr,∂𝜙,∂K𝜙,∂E = drstate.x
+    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γr,∂2𝜙,∂2K𝜙,∂2E = dr2state.x
+    ∂tα,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrr,∂tγtθθ,∂tArr,∂tK,∂tΓr,∂t𝜙,∂tK𝜙,∂tE = dtstate.x
+    ∂4α,∂4A,∂4βr,∂4Br,∂4χ,∂4γtrr,∂4γtθθ,∂4Arr,∂4K,∂4Γr,∂4𝜙,∂4K𝜙,∂4E = dissipation.x
+
+    # Dirichlet boundary conditions on scalar field
+
+    #𝜙[1] = 0
+    #K𝜙[1:2] .= -K𝜙[4:-1:3]
+
+
+    # 𝜙[1:2] .= 0.
+    # K𝜙[1:2] .= 0.
 
     # Calculate first derivatives
 
@@ -293,14 +365,16 @@ function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::Ar
     deriv!(∂𝜙,𝜙,n,drt)
     deriv!(∂K𝜙,K𝜙,n,drt)
 
+    #∂𝜙[1:2] .= ∂𝜙[4:-1:3]
+
     # Calculate second derivatives
 
-    deriv!(∂2α,∂α,n,drt)
-    deriv!(∂2βr,∂βr,n,drt)
-    deriv!(∂2χ,∂χ,n,drt)
-    deriv!(∂2γtrr,∂γtrr,n,drt)
-    deriv!(∂2γtθθ,∂γtθθ,n,drt)
-    deriv!(∂2𝜙,∂𝜙,n,drt)
+    deriv2!(∂2α,α,n,drt)
+    deriv2!(∂2βr,βr,n,drt)
+    deriv2!(∂2χ,χ,n,drt)
+    deriv2!(∂2γtrr,γtrr,n,drt)
+    deriv2!(∂2γtθθ,γtθθ,n,drt)
+    deriv2!(∂2𝜙,𝜙,n,drt)
 
     # Convert between computational rt coordinnate
     # and trasditional r coordinate
@@ -438,9 +512,18 @@ function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::Ar
 
     @. ∂t𝜙 = βr*∂𝜙 - 2*α*K𝜙
 
-    @. ∂tK𝜙 = (βr*∂K𝜙 + α*K*K𝜙 + (1/2)*m^2*α*𝜙 - (1/2)*χ.*∂α.*∂𝜙./γtrr
+    @. ∂tK𝜙 = (βr*∂K𝜙 + α*K*K𝜙 + (1/2)*(m^2)*α*𝜙 - (1/2)*χ*∂α*∂𝜙/γtrr
         - (1/2)*(α*χ/γtrr)*(∂2𝜙 + ∂𝜙*(∂γtθθ/γtθθ - (1/2)*∂γtrr/γtrr
         - (1/2)*(∂χ/χ))))
+
+    # @. ∂tK𝜙 = (βr*∂K𝜙 + (m^2*α*𝜙)/2 - (K𝜙*βr*∂α)/α + K𝜙*∂βr + (K𝜙*βr*∂γtrr)/(2*γtrr)
+    #  + (K𝜙*βr*∂γtθθ)/γtθθ + ((βr^2)*∂α*∂𝜙)/(2*α^2) - (χ*∂α*∂𝜙)/(2*γtrr)
+    #  + (α*χ*∂γtrr*∂𝜙)/(4*γtrr^2) - (α*χ*∂γtθθ*∂𝜙)/(2*γtrr*γtθθ)
+    #  - (3*K𝜙*βr*∂χ)/(2*χ) + (α*∂𝜙*∂χ)/(4*γtrr) - (α*χ*∂2𝜙)/(2*γtrr)
+    #  + (K𝜙*∂tα)/α - (βr*∂𝜙*∂tα)/(2*α^2) - (K𝜙*∂tγtrr)/(2*γtrr)
+    #  - (K𝜙*∂tγtθθ)/γtθθ - (βr*∂α*∂t𝜙)/(2*α^2) + (∂tα*∂t𝜙)/(2*α^2)
+    #  + (3*K𝜙*∂tχ)/(2*χ))
+
 
     ρ = temp.x[1]
     Sr = temp.x[2]
@@ -453,10 +536,15 @@ function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::Ar
     @. S = 6*K𝜙^2 - (1/2)*(χ/γtrr)*∂𝜙^2 - (3/2)*(m^2)*𝜙^2
     @. Srr = (γtrr/χ)*(2*K𝜙^2 + (1/2)*(χ/γtrr)*∂𝜙^2 - (1/2)*(m^2)*𝜙^2)
 
-    @. ∂tArr += -8*pi*α*(χ*Srr - (1/3)*S*γtrr)
-    @. ∂tK += 4*pi*α*(ρ + S)
-    @. ∂tΓr += -16*pi*α*Sr/γtrr
+    # @. ∂tArr += -8*pi*α*(χ*Srr - (1/3)*S*γtrr)
+    # @. ∂tK += 4*pi*α*(ρ + S)
+    # @. ∂tΓr += -16*pi*α*Sr/γtrr
 
+    @. ∂tE = -(∂𝜙*χ/γtrr - 2*βr*K𝜙/α)*∂t𝜙
+
+    #@. ∂tE = -2*K𝜙*∂t𝜙
+
+    #@. ∂tp = ∂t𝜙*∂𝜙*real((α^2-γtrr*(βr^2)/χ+0im)^(1/2))
 
     # fr = param.r
     #
@@ -508,6 +596,7 @@ function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::Ar
     dissipation!(∂4Γr,Γr,drdrt,n)
     dissipation!(∂4𝜙,𝜙,drdrt,n)
     dissipation!(∂4K𝜙,K𝜙,drdrt,n)
+    dissipation!(∂4E,E,drdrt,n)
 
     # Magnitude of dissipation
     σ = 0.3
@@ -524,6 +613,7 @@ function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::Ar
     @. ∂tΓr -= (1/16)*σ*∂4Γr/drt
     @. ∂t𝜙 -= (1/16)*σ*∂4𝜙/drt
     @. ∂tK𝜙 -= (1/16)*σ*∂4K𝜙/drt
+    @. ∂tE -= (1/16)*σ*∂4E/drt
 
     # Convert back to regularized variables
     # for the time derivatives
@@ -536,38 +626,61 @@ function rhs_test(dtstate::ArrayPartition{T, NTuple{12, Vector{T}}},regstate::Ar
 
     # Specify the inner temporal boundary conditions
 
-    for i in 1:12
-        dtstate.x[i][1:2] .= 0.
+    # ∂tr𝜙 = (-25. *∂t𝜙[1] + 48. *∂t𝜙[2] - 36. *∂t𝜙[3] + 16. *∂t𝜙[4] - 3. *∂t𝜙[5])/(12. *drt)
+    # ∂tr𝜙 /= drdrt[1]
+    #
+    # ∂tK𝜙[1] = (βr[1]/(2*α[1]))*∂tr𝜙
+
+    for i in 1:(numvar-3)
+        dtstate.x[i][1] = 0.
     end
+
+    # @. ∂t𝜙[1:2] = βr[1:2]*∂𝜙[1:2]
+    # @. ∂tK𝜙[1:2] = βr[1:2]*∂K𝜙[1:2]
+
+    #Impose energy flux reflection boundary condition
+    # @. ∂tE[1:2] = -∂tE[4:-1:3]
+    #
+    # #Convert this relationship to ∂t𝜙
+
+    ∂t𝜙[1:10] .= 0
+    ∂t𝜙[10] = -∂𝜙[10]/βr[10]
+
+    #∂t𝜙[1] = -0.05*2*K𝜙[1]*(α[1]^2 - (βr[1]^2)*γtrr[1]/χ[1])/α[1]
+    #∂t𝜙[1] = -0.05*∂𝜙[1]*(α[1]^2 - (βr[1]^2)*γtrr[1]/χ[1])*χ[1]/(γtrr[1]*βr[1])
+
+    #∂tK𝜙[0] = 0
+
+    # What to do with ∂tK𝜙?
 
     # Specify the outer temporal boundary conditions
 
-    for i in 1:12
-        dtstate.x[i][(n-1):n] .= 0.
+    for i in 1:numvar
+        dtstate.x[i][n] = 0.
     end
 
     # Store the calculated state into the param
     # so that we can print it to the screen
 
-    for i in 1:12
+    for i in 1:numvar
         dtstate2.x[i] .= dtstate.x[i]
     end
 
 end
 
-function rhs_all(regstate::ArrayPartition{Float64, NTuple{12, Vector{Float64}}}, param::Param{Float64}, t)
+function rhs_all(regstate::VarContainer{T}, param::Param{T}, t) where T
 
-    n = param.grid.ncells + 4
+    n = param.grid.ncells + 2
 
-    dtstate = similar(ArrayPartition,Float64,n)
+    dtstate = similar(ArrayPartition,T,n)
 
-    rhs_test(dtstate,regstate,param,t)
+    rhs!(dtstate,regstate,param,t)
 
     return dtstate
 
 end
 
-function constraints(state::ArrayPartition,drstate::ArrayPartition,dr2state::ArrayPartition,param)
+function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::VarContainer{T},param) where T
 
     ############################################
     # Caculates the constraints of the system
@@ -581,14 +694,14 @@ function constraints(state::ArrayPartition,drstate::ArrayPartition,dr2state::Arr
 
     # Unpack Variables
 
-    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙 = state.x
+    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙,p = state.x
 
-    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γr,∂𝜙,∂K𝜙 = drstate.x
+    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γr,∂𝜙,∂K𝜙,∂p = drstate.x
 
-    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γr,∂2𝜙,∂2K𝜙 = dr2state.x
+    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γr,∂2𝜙,∂2K𝜙,∂2p = dr2state.x
 
     m = 1.
-    n = param.grid.ncells + 4
+    n = param.grid.ncells + 2
     drt = param.drt
     r = param.rsamp
     drdrt = param.drdrtsamp
@@ -637,7 +750,10 @@ function constraints(state::ArrayPartition,drstate::ArrayPartition,dr2state::Arr
     @. ∂Arr = sqrt(r^(-5))*∂Arr - (5/2)*Arr/r
 
 
-    ρ = 2*K𝜙.^2 + (1/2)*(χ./γtrr).*∂𝜙.^2 + (1/2)*m^2*𝜙.^2
+    #ρ = 2*K𝜙.^2 + (1/2)*(χ./γtrr).*∂𝜙.^2 + (1/2)*m^2*𝜙.^2
+
+    ρ = -2*K𝜙.*(βr.*∂𝜙 .- 2*α.*K𝜙)./α
+
     Sr = 2*K𝜙.*∂𝜙
 
     # Constraint Equations
@@ -657,7 +773,7 @@ function constraints(state::ArrayPartition,drstate::ArrayPartition,dr2state::Arr
 
 end
 
-function horizon(T,state::ArrayPartition,param)
+function horizon(state::VarContainer{T},param) where T
 
     ############################################
     # Caculates the apparent horizon
@@ -732,13 +848,13 @@ end
 # end
 
 
-function custom_progress_message(dt,state::ArrayPartition{T, NTuple{numvar, Vector{T}}},param,t) where T
+function custom_progress_message(dt,state::VarContainer{T},param,t) where T
 
     ###############################################
     # Outputs status numbers while the program runs
     ###############################################
 
-    dtstate = param.dtstate::ArrayPartition{T, NTuple{numvar, Vector{T}}}
+    dtstate = param.dtstate::VarContainer{T}
 
     ∂tα,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrr,∂tγtθθ,∂tArr,∂tK,∂tΓr,∂t𝜙,∂tK𝜙 = dtstate.x
 
@@ -773,14 +889,15 @@ function solution_saver(T,grid,sol,param,folder)
     # in the choosen data folder directory
     ###############################################
 
-    vars = (["α","A","βr","Br","χ","γtrr","γtθθ","Arr","K","Γr","𝜙","K𝜙",
+    vars = (["α","A","βr","Br","χ","γtrr","γtθθ","Arr","K","Γr","𝜙","K𝜙","p",
     "∂tα","∂tA","∂tβr","∂tBr","∂tχ","∂tγtrr","∂tγtθθ","∂tArr","∂tK","∂tΓr","∂t𝜙","∂tK𝜙",
-    "H","Mr","Gr","ρ","appHorizon"])
+    "∂tp","H","Mr","Gr","ρ","appHorizon"])
     varlen = length(vars)
     #mkdir(string("data\\",folder))
     tlen = size(sol)[2]
-    rlen = grid.ncells + 4
+    rlen = grid.ncells + 2
     r = param.rsamp
+    rtmin = param.rtmin
     #cons = Array{GridFun,2}(undef,tlen,4)
     #state = Array{ArrayPartition,1}(undef,tlen)
     #dstate = Array{ArrayPartition,1}(undef,tlen)
@@ -801,9 +918,9 @@ function solution_saver(T,grid,sol,param,folder)
     #
     #     state[i] = ArrayPartition(α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙)
     #     derivs[i] = param.dtstate
-    #     rhs_test(derivs[i],sol[i],param,0)
+    #     rhs!(derivs[i],sol[i],param,0)
     #     #cons[i,1:4] .= constraints!(T,state[i],dstate[i],d2state[i],param)
-    #     #apphorizon[i] = horizon(T,state[i],param)
+    #     #apphorizon[i] = horizon(state[i],param)
     # end
 
     drstate = param.drstate
@@ -819,7 +936,7 @@ function solution_saver(T,grid,sol,param,folder)
     array[1,2:end] .= r
 
     for j = 1:varlen
-        if j < 13
+        if j < numvar+1
             for i = 2:tlen+1
                 array[i,1] = sol.t[i-1]
                 array[i,2:end] .= sol[i-1].x[j]
@@ -827,18 +944,18 @@ function solution_saver(T,grid,sol,param,folder)
                 #     println(array[i,2:10])
                 # end
             end
-        elseif j < 25
+        elseif j < 2*numvar+1
 
             for i = 2:tlen+1
 
                 array[i,1] = sol.t[i-1]
-                array[i,2:end] .= dtstate[i-1].x[j-12]
+                array[i,2:end] .= dtstate[i-1].x[j-numvar]
             end
-        elseif j < 29
+        elseif j < 2*numvar+5
             for i = 2:tlen+1
                 #println(size(cons[i-1][j-24]))
                 array[i,1] = sol.t[i-1]
-                array[i,2:end] .= cons[i-1][j-24]
+                array[i,2:end] .= cons[i-1][j-2*numvar]
             end
         # elseif j == varlen
         #     for i = 2:tlen+1
@@ -857,12 +974,11 @@ function solution_saver(T,grid,sol,param,folder)
 
     # for i = 2:tlen+1
     #     array[i,1] = sol.t[i-1]
-    #     array[i,2:end] .= sol[i-1].x[1][:]
-    #     println(sol[i-1].x[1][1:10])
+    #     array[i,2:end] .= sol[i-1].x[13]
     # end
     #
     # CSV.write(
-    # string("data/",folder,"/",vars[1],".csv"),
+    # string("data/",folder,"/","p-",rtmin,".csv"),
     # DataFrame(array, :auto),
     # header=false
     # )
@@ -888,152 +1004,108 @@ function main(points)
     # file.
     ###############################################
 
-    T = Float64
-    rspan = T[1.,210.]
-    rtspan = T[1.,21.]
-
-    rtmin, rtmax = rtspan
-
-    domain = Domain{S}(rtmin, rtmax)
-    grid = Grid(domain, points)
-
-    n = grid.ncells + 4
-
-    drt = spacing(grid)
-    dt = drt/4.
-
-    tspan = T[0.,20. ]
-    tmin, tmax = tspan
-
-    printtimes = 1.
-
-    v = 1.
-
-    m = 0.
-
-    Mtot = 1.
-
-    f(b) = b*tan(rtspan[2]/b)-rspan[2]
-
-    scale = find_zero(f, 0.64*rtspan[2])
-
-    r(rt) = scale*tan(rt/scale)
-    drdrt(rt) = sec(rt/scale)^2
-    d2rdrt(rt) = (2/scale)*(sec(rt/scale)^2)*tan(rt/scale)
-
-    # r(rt) = rt
-    # drdrt(rt) = 1
-    # d2rdrt(rt) = 0
-
-    atol = eps(T)^(T(3) / 4)
-
-    #alg = KuttaPRK2p5()
-    alg = RK4()
-    #alg = ImplicitMidpoint()
-
-    #printlogo()
-
-    custom_progress_step = round(Int, printtimes/dt)
-    step_iterator = custom_progress_step
-
-    regstate = similar(ArrayPartition,T,n)
-    state = similar(ArrayPartition,T,n)
-    drstate = similar(ArrayPartition,T,n)
-    dr2state = similar(ArrayPartition,T,n)
-    dtstate = similar(ArrayPartition,T,n)
-    dissipation = similar(ArrayPartition,T,n)
-    temp = similar(ArrayPartition,T,n)
-
-    # regstate = similar(Array{T}(undef,numvar,n))
-    # state = similar(Array{T}(undef,numvar,n))
-    # drstate = similar(Array{T}(undef,numvar,n))
-    # dr2state = similar(Array{T}(undef,numvar,n))
-    # dtstate = similar(Array{T}(undef,numvar,n))
-    # dissipation = similar(Array{T}(undef,numvar,n))
-    # temp = similar(Array{T}(undef,numvar,n))
-
-    #println("Defining Problem...")
-    rsamp = similar(Vector{T}(undef,n))
-    drdrtsamp = similar(Vector{T}(undef,n))
-    d2rdrtsamp = similar(Vector{T}(undef,n))
-
-    sample!(rsamp, grid, r)
-    sample!(drdrtsamp, grid, drdrt)
-    sample!(d2rdrtsamp, grid, d2rdrt)
-
-    param = Param(rtmin,rtmax,drt,Mtot,grid,r,drdrt,d2rdrt,rsamp,drdrtsamp,d2rdrtsamp,state,drstate,dr2state,dtstate,dissipation,temp)
-    #
-    init!(regstate, param)
-
-    # @btime rhs!($regstate,$regstate,$param, 0.0)
-    # # @btime radial_derivatives!($regstate,$regstate,$regstate, $param, 0.0)
-    # # @btime regular_to_canonical!($regstate,$regstate,$regstate, $param, 0.0)
-    # # # #
-    # return
-
-    prob = ODEProblem(rhs_test, regstate, tspan, param)
-
-    println("Starting Solution...")
-
-    #return
-
-    println("")
-    println("| Time | max α'(t) | max χ'(t) | max γtrr'(t) | max γtθθ'(t) | max Arr'(t) | max K'(t) | max Γr'(t) |")
-    println("|______|___________|___________|______________|______________|_____________|___________|____________|")
-    println("")
+    for i = 9:9
 
 
-    sol = solve(
-        prob, alg,
-        abstol = atol,
-        dt = drt/4,
-        adaptive = false,
-        saveat = printtimes,
-        alias_u0 = true,
-        progress = true,
-        progress_steps = custom_progress_step,
-        progress_message = custom_progress_message
-    )
+        T = Float64
+        rtspan = T[2.,22.] .+ (1.0 - 0.1*i)
 
-    #@code_native deriv!([1.0,1.0,1.0,1.0,1.0,1.0], [1.0,1.0,1.0,1.0,1.0,1.0], 6, 1.)
+        rtmin, rtmax = rtspan
 
-    #@btime α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙 = $state
+        rspan = T[rtmin,rtmax*10.]
 
-    #@btime deriv!($dtstate[1],$regstate[1], $n, 1.)
+        println("Mirror: ",rtmin)
 
-    # rhs_test(dtstate,regstate, param, 0)
-    #
-    # Profile.clear_malloc_data()
-    #
-    # rhs_test(dtstate,regstate, param, 0)
+        domain = Domain{T}(rtmin, rtmax)
+        grid = Grid(domain, points)
 
-    #@btime rhs_test($dtstate,$regstate, $param, 1.)
+        n = grid.ncells + 2
 
-    #@code_warntype rhs_test(dtstate,regstate, param, 1.)
+        drt = spacing(grid)
+        dt = drt/4.
 
-    # @profile rhs_test(dtstate,regstate, param, 1.)
-    #
-    # Profile.print()
+        tspan = T[0., 30.]
+        tmin, tmax = tspan
 
-    #@btime α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙 = state
+        printtimes = 1.
 
-    #@btime radial_derivatives!($drstate, $dr2state, $regstate, $param, 0)
+        v = 1.
 
-    # df = similar(Vector{T}(undef,n))
-    # f = similar(Vector{T}(undef,n))
-    #
-    # a = GridFun(grid,Vector{T}(zeros(n)))
-    # b = GridFun(grid,Vector{T}(zeros(n)))
-    #
-    # test = similar(VectorOfArray,T,n)
-    # )
+        m = 0.
+
+        Mtot = 1.
+
+        f(b) = b*tan(rtmax/b)-rspan[2]
+
+        scale = find_zero(f, 0.64*rtmax)
+
+        r(rt) = scale*tan((rt-rtmin)/scale) + rtmin
+        drdrt(rt) = sec((rt-rtmin)/scale)^2
+        d2rdrt(rt) = (2/scale)*(sec((rt-rtmin)/scale)^2)*tan((rt-rtmin)/scale)
+
+        # r(rt) = rt
+        # drdrt(rt) = 1
+        # d2rdrt(rt) = 0
+
+        atol = eps(T)^(T(3) / 4)
+
+        alg = RK4()
+        #alg = Cash4()
+        #alg = Rodas4()
+
+        #printlogo()
+
+        custom_progress_step = round(Int, printtimes/dt)
+        step_iterator = custom_progress_step
+
+        regstate = similar(ArrayPartition,T,n)
+        state = similar(ArrayPartition,T,n)
+        drstate = similar(ArrayPartition,T,n)
+        dr2state = similar(ArrayPartition,T,n)
+        dtstate = similar(ArrayPartition,T,n)
+        dissipation = similar(ArrayPartition,T,n)
+        temp = similar(ArrayPartition,T,n)
+
+        #println("Defining Problem...")
+        rsamp = similar(Vector{T}(undef,n))
+        drdrtsamp = similar(Vector{T}(undef,n))
+        d2rdrtsamp = similar(Vector{T}(undef,n))
+
+        sample!(rsamp, grid, r)
+        sample!(drdrtsamp, grid, drdrt)
+        sample!(d2rdrtsamp, grid, d2rdrt)
+
+        param = Param(rtmin,rtmax,drt,Mtot,grid,r,drdrt,d2rdrt,rsamp,drdrtsamp,d2rdrtsamp,state,drstate,dr2state,dtstate,dissipation,temp)
+
+        init!(regstate, param)
+
+        prob = ODEProblem(rhs!, regstate, tspan, param)
+
+        #println("Starting Solution...")
+
+        println("")
+        println("| Time | max α'(t) | max χ'(t) | max γtrr'(t) | max γtθθ'(t) | max Arr'(t) | max K'(t) | max Γr'(t) |")
+        println("|______|___________|___________|______________|______________|_____________|___________|____________|")
+        println("")
 
 
+        sol = solve(
+            prob, alg,
+            abstol = atol,
+            dt = drt/4,
+            adaptive = false,
+            saveat = printtimes,
+            alias_u0 = true,
+            progress = true,
+            progress_steps = custom_progress_step,
+            progress_message = custom_progress_message
+        )
 
-    #return
 
-    solution_saver(T,grid,sol,param,"test")
+        solution_saver(T,grid,sol,param,"test")
 
+
+    end
 
     return
 
@@ -1042,65 +1114,6 @@ end
 
 end
 
-# k1 = zero(GBSSN_Variables{T,T}, grid)::GBSSN_Variables
-# k2 = zero(GBSSN_Variables{T,T}, grid)::GBSSN_Variables
-# k3 = zero(GBSSN_Variables{T,T}, grid)::GBSSN_Variables
-# k4 = zero(GBSSN_Variables{T,T}, grid)::GBSSN_Variables
-#
-# temp = zero(GBSSN_Variables{T,T}, grid)::GBSSN_Variables
-#
-# saveat = dt
-#
-# trange = tmin:dt:tmax
-#
-# tlen = length(trange)
-#
-# save_range = tmin:saveat:tmax
-#
-# save_len = length(save_range)
-#
-# save = Array{GBSSN_Variables,1}(undef,save_len)
-#
-# save[1] = regstate
-#
-# for t = trange
-#
-#     rhs!(dtstate, regstate, param, t)
-#
-#     k1 .= dtstate
-#
-#     temp .= regstate.+dt.*k1./2
-#
-#     rhs!(dtstate, temp, param , t + dt/2)
-#
-#     k2 .= dtstate
-#
-#     temp .= regstate.+dt.*k2./2
-#
-#     rhs!(dtstate, temp, param , t + dt/2)
-#
-#     k3 .= dtstate
-#
-#     temp .= regstate.+dt.*k3
-#
-#     rhs!(dtstate, temp, param , t + dt)
-#
-#     k4 .= dtstate
-#
-#     @. regstate = regstate + dt*(k1+2*k2+2 *k3+k4)/6
-#
-#     #save
-#
-#     if t in save_range
-#
-#         i = Int(round((tmax-tmin)/saveat) + 1)
-#
-#         save[i] = regstate
-#
-#     end
-#
-# end
-#
 # function M_init(::Type{T}, grid::Grid, param) where {T}
 #
 #     ############################################
