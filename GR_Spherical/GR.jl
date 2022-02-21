@@ -12,7 +12,7 @@ using Roots
 using BenchmarkTools
 using InteractiveUtils
 using RecursiveArrayTools
-using StaticArrays
+#using StaticArrays
 using LinearAlgebra
 
 using Profile
@@ -86,6 +86,26 @@ function sample!(f::Vector{T}, grid::Grid{S}, fun) where {S,T}
 
 end
 
+fα(M,rt) = real((1-2*M/(r(rt))+0im)^(1/2))
+f∂α(M,rt) = (M/r(rt)^2)*fα(M,rt)^(-1)
+f∂2α(M,rt) = (M/r(rt)^4)*(3*M-2*r(rt))*fα(M,rt)^(-3)
+
+fA(rt) = 0.
+fβr(M,rt) = 0.
+fBr(rt) = 0.
+fχ(rt) = 1.
+
+fγtrr(M,rt) = (1-2*M/r(rt))^(-1)
+f∂γtrr(M,rt) = -(2*M/r(rt)^2)*fγtrr(M,rt)^2
+f∂2γtrr(M,rt) = (4*M/r(rt)^3)*fγtrr(M,rt)^3
+
+fγtθθ(rt) = r(rt)^2
+fArr(M,∂M,rt) = 0.
+fK(M,∂M,rt) = 0.
+
+fΓr(M,∂M,rt) = (3*M-2*r(rt))/(r(rt)^2)
+f∂Γr(M,∂M,rt) = 2*(r(rt)-3*M)/(r(rt)^3)
+
 function init!(state::VarContainer{T}, param) where T
 
     ############################################
@@ -111,21 +131,23 @@ function init!(state::VarContainer{T}, param) where T
     # Mass (no real reason not to use 1 here)
     #M = 1
 
-    fα(M,rt) = real((1+2*M/(r(rt))+0im)^(-1/2))
-    fA(rt) = 0.
-    fβr(M,rt) = (2*M/r(rt))*fα(M,rt)^2
-    fBr(rt) = 0.
-    fχ(rt) = 1.
-    fγtrr(M,rt) = 1+2*M/r(rt)
-    fγtθθ(rt) = r(rt)^2
-    fArr(M,∂M,rt) = (4/3)*(r(rt)*(M+r(rt))*∂M-M*(3*M+2*r(rt)))/real(((r(rt)^5)*(r(rt)+2*M)+0im)^(1/2))
-    fK(M,∂M,rt) = (2*M*(3*M+r(rt))+2*r(rt)*∂M*(M+r(rt)))/real((r(rt)*(r(rt)+2*M)+0im)^(3/2))
-    fΓr(M,∂M,rt) = (r(rt)*∂M-2*r(rt)-5*M)/(r(rt)+2*M)^2
+    # fα(M,rt) = real((1+2*M/(r(rt))+0im)^(-1/2))
+    # fA(rt) = 0.
+    # fβr(M,rt) = (2*M/r(rt))*fα(M,rt)^2
+    # fBr(rt) = 0.
+    # fχ(rt) = 1.
+    # fγtrr(M,rt) = 1+2*M/r(rt)
+    # fγtθθ(rt) = r(rt)^2
+    # fArr(M,∂M,rt) = (4/3)*(r(rt)*(M+r(rt))*∂M-M*(3*M+2*r(rt)))/real(((r(rt)^5)*(r(rt)+2*M)+0im)^(1/2))
+    # fK(M,∂M,rt) = (2*M*(3*M+r(rt))+2*r(rt)*∂M*(M+r(rt)))/real((r(rt)*(r(rt)+2*M)+0im)^(3/2))
+    # fΓr(M,∂M,rt) = (r(rt)*∂M-2*r(rt)-5*M)/(r(rt)+2*M)^2
+
+    #Schwarzschild initial conditions
 
     r0 = 10.
     σr = 0.5
     #Amp = 1.
-    Amp = 0.01
+    Amp = 0.0
 
     f𝜙(rt) = Amp*(1/r(rt))*exp(-(1/2)*((r(rt)-r0)/σr)^2)
     f∂𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r(rt)*r0-r(rt)^2-σr^2)/(r(rt)^2*σr^2)
@@ -182,15 +204,29 @@ function init!(state::VarContainer{T}, param) where T
     # sample!(K𝜙, grid, fK𝜙)
     # sample!(p, grid, rt -> 0)
 
-    sample!(αreg, grid, rt -> fαreg(1,rt) )
+    # sample!(αreg, grid, rt -> fαreg(1,rt) )
+    # sample!(A, grid, fA)
+    # sample!(βr, grid, rt -> fβr(1,rt) )
+    # sample!(Br, grid, fBr)
+    # sample!(χ, grid, fχ)
+    # sample!(γtrrreg, grid, rt -> fγtrrreg(1,rt) )
+    # sample!(γtθθreg, grid, rt -> 0)
+    # sample!(Arrreg, grid, rt -> fArrreg(1,0,rt) )
+    # sample!(Kreg, grid, rt -> fKreg(1,0,rt) )
+    # sample!(Γr, grid, rt -> fΓr(1,0,rt))
+    # sample!(𝜙, grid, f𝜙)
+    # sample!(K𝜙, grid, fK𝜙)
+    # sample!(p, grid, rt -> 0)
+
+    sample!(αreg, grid, rt -> fα(1,rt) )
     sample!(A, grid, fA)
     sample!(βr, grid, rt -> fβr(1,rt) )
     sample!(Br, grid, fBr)
     sample!(χ, grid, fχ)
-    sample!(γtrrreg, grid, rt -> fγtrrreg(1,rt) )
-    sample!(γtθθreg, grid, rt -> 0)
-    sample!(Arrreg, grid, rt -> fArrreg(1,0,rt) )
-    sample!(Kreg, grid, rt -> fKreg(1,0,rt) )
+    sample!(γtrrreg, grid, rt -> fγtrr(1,rt) )
+    sample!(γtθθreg, grid, rt -> fγtθθ(rt))
+    sample!(Arrreg, grid, rt -> fArr(1,0,rt) )
+    sample!(Kreg, grid, rt -> fK(1,0,rt) )
     sample!(Γr, grid, rt -> fΓr(1,0,rt))
     sample!(𝜙, grid, f𝜙)
     sample!(K𝜙, grid, fK𝜙)
@@ -402,22 +438,25 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # Convert between regularized variables
     # and cannonical variables
 
-    @. α = real((1 + α/r + 0im)^(-1/2))
-    @. ∂α = α*(1 - (1 + ∂α)*α^2)/(2*r)
+    @. α *= fα(M,rt)
+    @. ∂α = ∂α*fα(M,rt) + α*∂fα(M,rt)/fα(M,rt)
     @. ∂2α = (6*r*∂α^2 - 4*α*∂α - ∂2α*α^4)/(2*r*α)
+    #
+    # @. γtrr = γtrr/r + 1
+    # @. ∂γtrr = (1 - γtrr + ∂γtrr)/r
+    # @. ∂2γtrr = (∂2γtrr - 2*∂γtrr)/r
+    #
+    # @. γtθθ = (r^2)*(γtθθ + 1)
+    # @. ∂γtθθ = (2*γtθθ + ∂γtθθ*r^3)/r
+    # @. ∂2γtθθ = (4*∂γtθθ*r - 6*γtθθ + ∂2γtθθ*r^4)/(r^2)
+    #
+    # @. K = sqrt(r^(-3))*K
+    # @. ∂K = sqrt(r^(-3))*∂K - (3/2)*K/r
+    #
+    # @. Arr = sqrt(r^(-5))*Arr
+    # @. ∂Arr = sqrt(r^(-5))*∂Arr - (5/2)*Arr/r
 
-    @. γtrr = γtrr/r + 1
-    @. ∂γtrr = (1 - γtrr + ∂γtrr)/r
-    @. ∂2γtrr = (∂2γtrr - 2*∂γtrr)/r
-
-    @. γtθθ = (r^2)*(γtθθ + 1)
-    @. ∂γtθθ = (2*γtθθ + ∂γtθθ*r^3)/r
-    @. ∂2γtθθ = (4*∂γtθθ*r - 6*γtθθ + ∂2γtθθ*r^4)/(r^2)
-
-    @. K = sqrt(r^(-3))*K
-    @. ∂K = sqrt(r^(-3))*∂K - (3/2)*K/r
-
-    @. Arr = sqrt(r^(-5))*Arr
+    @. Γr = Γr
     @. ∂Arr = sqrt(r^(-5))*∂Arr - (5/2)*Arr/r
 
     #########################################################
@@ -618,11 +657,11 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # Convert back to regularized variables
     # for the time derivatives
 
-    @. ∂tα = -2*r*∂tα/(α^3)
-    @. ∂tγtrr = r*∂tγtrr
-    @. ∂tγtθθ = ∂tγtθθ/(r^2)
-    @. ∂tArr = sqrt(r^5)*∂tArr
-    @. ∂tK = sqrt(r^3)*∂tK
+    # @. ∂tα = -2*r*∂tα/(α^3)
+    # @. ∂tγtrr = r*∂tγtrr
+    # @. ∂tγtθθ = ∂tγtθθ/(r^2)
+    # @. ∂tArr = sqrt(r^5)*∂tArr
+    # @. ∂tK = sqrt(r^3)*∂tK
 
     # Specify the inner temporal boundary conditions
 
@@ -643,8 +682,8 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     #
     # #Convert this relationship to ∂t𝜙
 
-    ∂t𝜙[1:10] .= 0
-    ∂t𝜙[10] = -∂𝜙[10]/βr[10]
+    ∂t𝜙[1] = 0
+    #∂t𝜙[10] = -∂𝜙[10]/βr[10]
 
     #∂t𝜙[1] = -0.05*2*K𝜙[1]*(α[1]^2 - (βr[1]^2)*γtrr[1]/χ[1])/α[1]
     #∂t𝜙[1] = -0.05*∂𝜙[1]*(α[1]^2 - (βr[1]^2)*γtrr[1]/χ[1])*χ[1]/(γtrr[1]*βr[1])
