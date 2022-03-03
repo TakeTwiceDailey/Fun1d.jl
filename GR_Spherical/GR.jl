@@ -149,11 +149,11 @@ end
 
 #Minkowski
 
-fα(M,r,rt) = 1
+fα(M,r,rt) = sqrt(4/3)
 f∂α(M,r,rt) = 0
 f∂2α(M,r,rt) = 0
 
-fβr(M,r,rt) = 0
+fβr(M,r,rt) = 2/3
 f∂βr(M,r,rt) = 0
 f∂2βr(M,r,rt) = 0
 
@@ -161,7 +161,7 @@ fχ(M,r,rt) = 1.
 f∂χ(M,r,rt) = 0.
 f∂2χ(M,r,rt) = 0.
 
-fγtrr(M,r,rt) = 1
+fγtrr(M,r,rt) = 3/4
 f∂γtrr(M,r,rt) = 0
 f∂2γtrr(M,r,rt) = 0
 
@@ -169,14 +169,14 @@ fγtθθ(M,r,rt) = r(rt)^2
 f∂γtθθ(M,r,rt) = 2*r(rt)
 f∂2γtθθ(M,r,rt) = 2
 
-fK(M,r,rt) = 0
-f∂K(M,r,rt) = 0
+fK(M,r,rt) = sqrt(4/3)/r(rt)
+f∂K(M,r,rt) = -sqrt(4/3)/r(rt)^2
 
-fArr(M,r,rt) = 0
-f∂Arr(M,r,rt) = 0
+fArr(M,r,rt) = -(1/sqrt(12))/r(rt)
+f∂Arr(M,r,rt) = (1/sqrt(12))/r(rt)^2
 
-fΓr(M,r,rt) = -2/r(rt)
-f∂Γr(M,r,rt) = 2/r(rt)^2
+fΓr(M,r,rt) = -(8/3)/r(rt)
+f∂Γr(M,r,rt) = (8/3)/r(rt)^2
 
 function init!(state::VarContainer{T}, param) where T
 
@@ -200,6 +200,7 @@ function init!(state::VarContainer{T}, param) where T
     d2rdrt = param.d2rdrt
     rtmin = param.rtmin
     rtmax = param.rtmax
+    reg_list = param.reg_list
 
     n = grid.ncells + 2
     m = 1.
@@ -285,19 +286,13 @@ function init!(state::VarContainer{T}, param) where T
     sample!(∂2γtθθ, grid, rt -> f∂2γtθθ(M(rt),r,rt) )
     sample!(∂2𝜙, grid, f𝜙)
 
-    sample!(α, grid, rt -> 1 )
-    sample!(A, grid, rt -> 0 )
-    sample!(βr, grid, rt -> 0 )
-    sample!(Br, grid, rt -> 0 )
-    sample!(χ, grid, rt -> 1 )
-    sample!(γtrr, grid, rt -> 1 )
-    sample!(γtθθ, grid, rt -> 1 )
-    sample!(Arr, grid, rt -> 0 )
-    sample!(K, grid, rt -> 0 )
-    sample!(Γr, grid, rt -> 1)
-    sample!(𝜙, grid, f𝜙 )
-    sample!(K𝜙, grid, fK𝜙 )
-    sample!(E, grid, rt -> 0)
+    for i in 1:numvar
+        if i in reg_list
+            sample!(state.x[i], grid, rt -> 1 )
+        else
+            @. state.x[i] = init_state.x[i]
+        end
+    end
 
 end
 
@@ -608,7 +603,6 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     #  - (K𝜙*∂tγtθθ)/γtθθ - (βr*∂α*∂t𝜙)/(2*α^2) + (∂tα*∂t𝜙)/(2*α^2)
     #  + (3*K𝜙*∂tχ)/(2*χ))
 
-
     ρ = temp.x[5]
     Sr = temp.x[6]
     S = temp.x[7]
@@ -830,9 +824,18 @@ function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::V
 
     #ρ = 2*K𝜙.^2 + (1/2)*(χ./γtrr).*∂𝜙.^2 + (1/2)*m^2*𝜙.^2
 
-    ρ = -2*K𝜙.*(βr.*∂𝜙 .- 2*α.*K𝜙)./α
+    @. ρ = 2*K𝜙^2 + (1/2)*(χ/γtrr)*∂𝜙^2 + (1/2)*(m^2)*𝜙^2
+    #Lower Index
+    @. Sr = 2*K𝜙*∂𝜙
+    @. S = 6*K𝜙^2 - (1/2)*(χ/γtrr)*∂𝜙^2 - (3/2)*(m^2)*𝜙^2
 
-    Sr = 2*K𝜙.*∂𝜙
+    γ = γtrr*(γtθθ^2)/χ^3
+
+    MKr = sqrt(γ)*(α*(ρ + S) - 2*βr*Sr)
+
+    for i in 1:(n-1)
+        MK += (drt/2)*(MKr[i] + MKr[i+1])
+    end
 
     # Constraint Equations
 
@@ -1122,7 +1125,7 @@ function main(points)
 
         # α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙,p = state.x
         #reg_list = [1,3,6,7,8,9,10]
-        reg_list = [7,10]
+        reg_list = [7,8,9,10]
 
 
         atol = eps(T)^(T(3) / 4)
