@@ -147,13 +147,44 @@ end
 # fΓr(M,r,rt) = -(5*M+2*r(rt))/(r(rt)+2*M)^2
 # f∂Γr(M,r,rt) = 2*(r(rt)+3*M)/(r(rt)+2*M)^3
 
-#Minkowski
+# Minkowski with shift
 
-fα(M,r,rt) = sqrt(4/3)
+# fα(M,r,rt) = sqrt(4/3)
+# f∂α(M,r,rt) = 0
+# f∂2α(M,r,rt) = 0
+#
+# fβr(M,r,rt) = 2/3
+# f∂βr(M,r,rt) = 0
+# f∂2βr(M,r,rt) = 0
+#
+# fχ(M,r,rt) = 1.
+# f∂χ(M,r,rt) = 0.
+# f∂2χ(M,r,rt) = 0.
+#
+# fγtrr(M,r,rt) = 3/4
+# f∂γtrr(M,r,rt) = 0
+# f∂2γtrr(M,r,rt) = 0
+#
+# fγtθθ(M,r,rt) = r(rt)^2
+# f∂γtθθ(M,r,rt) = 2*r(rt)
+# f∂2γtθθ(M,r,rt) = 2
+#
+# fK(M,r,rt) = sqrt(4/3)/r(rt)
+# f∂K(M,r,rt) = -sqrt(4/3)/r(rt)^2
+#
+# fArr(M,r,rt) = -(1/sqrt(12))/r(rt)
+# f∂Arr(M,r,rt) = (1/sqrt(12))/r(rt)^2
+#
+# fΓr(M,r,rt) = -(8/3)/r(rt)
+# f∂Γr(M,r,rt) = (8/3)/r(rt)^2
+
+# Minkowski without shift
+
+fα(M,r,rt) = 1
 f∂α(M,r,rt) = 0
 f∂2α(M,r,rt) = 0
 
-fβr(M,r,rt) = 2/3
+fβr(M,r,rt) = 0
 f∂βr(M,r,rt) = 0
 f∂2βr(M,r,rt) = 0
 
@@ -161,7 +192,7 @@ fχ(M,r,rt) = 1.
 f∂χ(M,r,rt) = 0.
 f∂2χ(M,r,rt) = 0.
 
-fγtrr(M,r,rt) = 3/4
+fγtrr(M,r,rt) = 1
 f∂γtrr(M,r,rt) = 0
 f∂2γtrr(M,r,rt) = 0
 
@@ -169,14 +200,14 @@ fγtθθ(M,r,rt) = r(rt)^2
 f∂γtθθ(M,r,rt) = 2*r(rt)
 f∂2γtθθ(M,r,rt) = 2
 
-fK(M,r,rt) = sqrt(4/3)/r(rt)
-f∂K(M,r,rt) = -sqrt(4/3)/r(rt)^2
+fK(M,r,rt) = 0
+f∂K(M,r,rt) = 0
 
-fArr(M,r,rt) = -(1/sqrt(12))/r(rt)
-f∂Arr(M,r,rt) = (1/sqrt(12))/r(rt)^2
+fArr(M,r,rt) = 0
+f∂Arr(M,r,rt) = 0
 
-fΓr(M,r,rt) = -(8/3)/r(rt)
-f∂Γr(M,r,rt) = (8/3)/r(rt)^2
+fΓr(M,r,rt) = -2/r(rt)
+f∂Γr(M,r,rt) = 2/r(rt)^2
 
 function init!(state::VarContainer{T}, param) where T
 
@@ -244,7 +275,7 @@ function init!(state::VarContainer{T}, param) where T
     # Constraint Equations
 
     function constraintSystem(M, param, rt)
-        f∂rtM(M,rt)
+        f∂rtM(M,rt)*0
     end
 
     atol = 1e-15
@@ -300,12 +331,20 @@ end
 
     # @inbounds @fastmath @simd
 
-    df[1] = T((-25. *f[1] + 48. *f[2] - 36. *f[3] + 16. *f[4] - 3. *f[5])/(12. *dx))
+    # df[1] = T((-25. *f[1] + 48. *f[2] - 36. *f[3] + 16. *f[4] - 3. *f[5])/(12. *dx))
+    #
+    # df[2] = T((-3. *f[1] - 10. *f[2] + 18. *f[3] - 6. *f[4] + f[5])/(12. *dx))
 
-    df[2] = T((-3. *f[1] - 10. *f[2] + 18. *f[3] - 6. *f[4] + f[5])/(12. *dx))
+    df[1] = (-48*f[1] + 59*f[2] - 8*f[3] - 3*f[4])/(34*dx)
 
-    for i in 3:(n - 2)
-        df[i] = T(((f[i-2] - 8. *f[i-1] + 8. *f[i+1] - f[i+2])/(12. *dx)))
+    df[2] = (-f[1] + f[3])/(2*dx)
+
+    df[3] = (8*f[1] - 59*f[2] + 59*f[4] - 8*f[5])/(86*dx)
+
+    df[4] = (3*f[1] - 59*f[3] + 64*f[5] - 8*f[5])/(98*dx)
+
+    for i in 5:(n - 2)
+        df[i] = (f[i-2] - 8*f[i-1] + 8*f[i+1] - f[i+2])/(12*dx)
     end
 
     df[n-1] = T(-(-3. *f[n] - 10. *f[n-1] + 18. *f[n-2] - 6. *f[n-3] + f[n-4])/(12. *dx))
@@ -318,12 +357,20 @@ end
 
     # @inbounds @fastmath @simd
 
-    df[1] = T((45. *f[1] - 154. *f[2] + 214. *f[3] - 156. *f[4] + 61. *f[5] - 10. *f[6])/(12. *dx^2))
+    # df[1] = T((45. *f[1] - 154. *f[2] + 214. *f[3] - 156. *f[4] + 61. *f[5] - 10. *f[6])/(12. *dx^2))
+    #
+    # df[2] = T((10. *f[1] - 15. *f[2] - 4. *f[3] + 14. *f[4] - 6. *f[5] + f[6])/(12. *dx^2))
 
-    df[2] = T((10. *f[1] - 15. *f[2] - 4. *f[3] + 14. *f[4] - 6. *f[5] + f[6])/(12. *dx^2))
+    df[1] = (2*f[1] - 5*f[2] + 4*f[3] - f[4])/(dx^2)
 
-    for i in 3:(n - 2)
-        df[i] = T(((-f[i-2] + 16. *f[i-1] - 30. *f[i+0] + 16. *f[i+1] - f[i+2])/(12. *dx^2)))
+    df[2] = (f[1] - 2*f[2] + f[3])/(dx^2)
+
+    df[3] = (-4*f[1] + 59*f[2] - 110*f[3] + 59*f[4] - 4*f[5])/(43*dx^2)
+
+    df[4] = (-f[1] + 59*f[3] - 118*f[4] + 64*f[5] - 4*f[6])/(49*dx^2)
+
+    for i in 5:(n - 2)
+        df[i] = (-f[i-2] + 16*f[i-1] - 30*f[i] + 16*f[i+1] - f[i+2])/(12*dx^2)
     end
 
     df[n-1] = T((10. *f[n] - 15. *f[n-1] - 4. *f[n-2] + 14. *f[n-3] - 6. *f[n-4] + f[n-5])/(12. *dx^2))
@@ -353,10 +400,16 @@ end
     # df[2] = (f[1] - 4. *f[2] + 6. *f[3] - 4. *f[4] + f[5])/(drdrt[2])
     #
 
-    df[1:2] .= 0.
+    df[1] = (-48*f[1] + 96*f[2] - 48*f[3])/(17)
 
-    for i in 3:(n - 2)
-        df[i] = T((f[i-2] - 4. *f[i-1] + 6. *f[i] - 4. *f[i+1] + f[i+2])/(drdrt[i]))
+    df[2] = (96*f[1] - 240*f[2] + 192*f[3] - 48*f[4])/(59)
+
+    df[3] = (-48*f[1] + 192*f[2] - 288*f[3] + 192*f[4] - 48*f[5])/(43)
+
+    df[4] = (-48f[2] + 192*f[3] - 288*f[4] + 192*f[5] - 48*f[6])/(49)
+
+    for i in 5:(n - 2)
+        df[i] = (-f[i-2] + 4*f[i-1] - 6*f[i] + 4*f[i+1] - f[i+2])
     end
 
     df[(n-1):n] .= 0.
@@ -663,11 +716,11 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # Calculate the numerical dissipation
 
     # Magnitude of dissipation
-    σ = 0.3
+    σ = 0.5
 
     for i in 1:numvar
         dissipation!(dissipation.x[i],state.x[i],drdrt,n)
-        @. dtstate.x[i] -= (1/16)*σ*dissipation.x[i]/drt
+        @. dtstate.x[i] += σ*dissipation.x[i]/16
     end
 
 
@@ -753,7 +806,7 @@ function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::V
     init_drstate = param.init_drstate
     init_dr2state = param.init_dr2state
 
-    m = 1.
+    m = 0.
     M = 1.
     n = param.grid.ncells + 2
     drt = param.drt
@@ -824,17 +877,24 @@ function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::V
 
     #ρ = 2*K𝜙.^2 + (1/2)*(χ./γtrr).*∂𝜙.^2 + (1/2)*m^2*𝜙.^2
 
+    ρ = temp.x[4]
+    Sr = temp.x[5]
+    γ = temp.x[6]
+    Er = temp.x[6]
+
     @. ρ = 2*K𝜙^2 + (1/2)*(χ/γtrr)*∂𝜙^2 + (1/2)*(m^2)*𝜙^2
     #Lower Index
     @. Sr = 2*K𝜙*∂𝜙
-    @. S = 6*K𝜙^2 - (1/2)*(χ/γtrr)*∂𝜙^2 - (3/2)*(m^2)*𝜙^2
+    #@. Tt_t = -ρ + βr*Sr/α
 
-    γ = γtrr*(γtθθ^2)/χ^3
+    @. γ = γtrr*(γtθθ^2)/χ^3
 
-    MKr = sqrt(γ)*(α*(ρ + S) - 2*βr*Sr)
+    @. Er = sqrt(γ)*(βr*Sr - α*ρ)*drdrt
+
+    E = 0
 
     for i in 1:(n-1)
-        MK += (drt/2)*(MKr[i] + MKr[i+1])
+        E += (drt/2)*(Er[i] + Er[i+1])
     end
 
     # Constraint Equations
@@ -850,7 +910,7 @@ function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::V
 
     𝓖r = -(1/2)*∂γtrr./(γtrr.^2) + Γr + (∂γtθθ./γtθθ)./γtrr
 
-    return (𝓗, 𝓜r, 𝓖r, ρ)
+    return (𝓗, 𝓜r, 𝓖r, E)
 
 end
 
@@ -972,7 +1032,7 @@ function solution_saver(T,grid,sol,param,folder)
 
     vars = (["α","A","βr","Br","χ","γtrr","γtθθ","Arr","K","Γr","𝜙","K𝜙","p",
     "∂tα","∂tA","∂tβr","∂tBr","∂tχ","∂tγtrr","∂tγtθθ","∂tArr","∂tK","∂tΓr","∂t𝜙","∂tK𝜙",
-    "∂tp","H","Mr","Gr","ρ","appHorizon"])
+    "∂tp","H","Mr","Gr","E","appHorizon"])
     varlen = length(vars)
     #mkdir(string("data\\",folder))
     tlen = size(sol)[2]
@@ -1038,11 +1098,12 @@ function solution_saver(T,grid,sol,param,folder)
                 array[i,1] = sol.t[i-1]
                 array[i,2:end] .= cons[i-1][j-2*numvar]
             end
-        # elseif j == varlen
-        #     for i = 2:tlen+1
-        #         array[i,1] = sol.t[i-1]
-        #         array[i,2:end] .= apphorizon[i-1]
-        #     end
+        elseif j == 2*numvar+4
+            for i = 2:tlen+1
+                array[i,1] = sol.t[i-1]
+                array[i,2] = cons[i-1][j-2*numvar]
+                array[i,3:end] .= 0
+            end
         end
 
         CSV.write(
@@ -1112,10 +1173,10 @@ function main(points)
         drt = spacing(grid)
         dt = drt/4.
 
-        tspan = T[0., 30.]
+        tspan = T[0., 15.]
         tmin, tmax = tspan
 
-        printtimes = 1.
+        printtimes = 0.5
 
         v = 1.
 
@@ -1125,8 +1186,8 @@ function main(points)
 
         # α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙,p = state.x
         #reg_list = [1,3,6,7,8,9,10]
-        reg_list = [7,8,9,10]
-
+        #reg_list = [7,8,9,10]
+        reg_list = [10]
 
         atol = eps(T)^(T(3) / 4)
 
