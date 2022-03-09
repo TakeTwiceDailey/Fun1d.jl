@@ -149,42 +149,11 @@ end
 
 # Minkowski with shift
 
-# fα(M,r,rt) = sqrt(4/3)
-# f∂α(M,r,rt) = 0
-# f∂2α(M,r,rt) = 0
-#
-# fβr(M,r,rt) = 2/3
-# f∂βr(M,r,rt) = 0
-# f∂2βr(M,r,rt) = 0
-#
-# fχ(M,r,rt) = 1.
-# f∂χ(M,r,rt) = 0.
-# f∂2χ(M,r,rt) = 0.
-#
-# fγtrr(M,r,rt) = 3/4
-# f∂γtrr(M,r,rt) = 0
-# f∂2γtrr(M,r,rt) = 0
-#
-# fγtθθ(M,r,rt) = r(rt)^2
-# f∂γtθθ(M,r,rt) = 2*r(rt)
-# f∂2γtθθ(M,r,rt) = 2
-#
-# fK(M,r,rt) = sqrt(4/3)/r(rt)
-# f∂K(M,r,rt) = -sqrt(4/3)/r(rt)^2
-#
-# fArr(M,r,rt) = -(1/sqrt(12))/r(rt)
-# f∂Arr(M,r,rt) = (1/sqrt(12))/r(rt)^2
-#
-# fΓr(M,r,rt) = -(8/3)/r(rt)
-# f∂Γr(M,r,rt) = (8/3)/r(rt)^2
-
-# Minkowski without shift
-
-fα(M,r,rt) = 1
+fα(M,r,rt) = sqrt(4/3)
 f∂α(M,r,rt) = 0
 f∂2α(M,r,rt) = 0
 
-fβr(M,r,rt) = 0
+fβr(M,r,rt) = 2/3
 f∂βr(M,r,rt) = 0
 f∂2βr(M,r,rt) = 0
 
@@ -192,7 +161,7 @@ fχ(M,r,rt) = 1.
 f∂χ(M,r,rt) = 0.
 f∂2χ(M,r,rt) = 0.
 
-fγtrr(M,r,rt) = 1
+fγtrr(M,r,rt) = 3/4
 f∂γtrr(M,r,rt) = 0
 f∂2γtrr(M,r,rt) = 0
 
@@ -200,14 +169,45 @@ fγtθθ(M,r,rt) = r(rt)^2
 f∂γtθθ(M,r,rt) = 2*r(rt)
 f∂2γtθθ(M,r,rt) = 2
 
-fK(M,r,rt) = 0
-f∂K(M,r,rt) = 0
+fK(M,r,rt) = sqrt(4/3)/r(rt)
+f∂K(M,r,rt) = -sqrt(4/3)/r(rt)^2
 
-fArr(M,r,rt) = 0
-f∂Arr(M,r,rt) = 0
+fArr(M,r,rt) = -(1/sqrt(12))/r(rt)
+f∂Arr(M,r,rt) = (1/sqrt(12))/r(rt)^2
 
-fΓr(M,r,rt) = -2/r(rt)
-f∂Γr(M,r,rt) = 2/r(rt)^2
+fΓr(M,r,rt) = -(8/3)/r(rt)
+f∂Γr(M,r,rt) = (8/3)/r(rt)^2
+
+# Minkowski without shift
+
+# fα(M,r,rt) = 1
+# f∂α(M,r,rt) = 0
+# f∂2α(M,r,rt) = 0
+#
+# fβr(M,r,rt) = 0
+# f∂βr(M,r,rt) = 0
+# f∂2βr(M,r,rt) = 0
+#
+# fχ(M,r,rt) = 1.
+# f∂χ(M,r,rt) = 0.
+# f∂2χ(M,r,rt) = 0.
+#
+# fγtrr(M,r,rt) = 1
+# f∂γtrr(M,r,rt) = 0
+# f∂2γtrr(M,r,rt) = 0
+#
+# fγtθθ(M,r,rt) = r(rt)^2
+# f∂γtθθ(M,r,rt) = 2*r(rt)
+# f∂2γtθθ(M,r,rt) = 2
+#
+# fK(M,r,rt) = 0
+# f∂K(M,r,rt) = 0
+#
+# fArr(M,r,rt) = 0
+# f∂Arr(M,r,rt) = 0
+#
+# fΓr(M,r,rt) = -2/r(rt)
+# f∂Γr(M,r,rt) = 2/r(rt)^2
 
 function init!(state::VarContainer{T}, param) where T
 
@@ -248,9 +248,12 @@ function init!(state::VarContainer{T}, param) where T
     σr = 0.5
     #Amp = 1.
     Amp = 0.01
+    min = 5
 
-    f𝜙(rt) = Amp*(1/r(rt))*exp(-(1/2)*((r(rt)-r0)/σr)^2)
-    f∂𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r(rt)*r0-r(rt)^2-σr^2)/(r(rt)^2*σr^2)
+
+
+    f𝜙(rt) = Amp*(1/r(rt))*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(sign(rt-min) + 1)/2
+    f∂𝜙(rt) = Amp*exp(-(1/2)*((r(rt)-r0)/σr)^2)*(r(rt)*r0-r(rt)^2-σr^2)/(r(rt)^2*σr^2)*(sign(rt-min) + 1)/2
     fK𝜙(rt) = 0.
 
     fρ(M,rt) = 0*(2*fK𝜙(rt)^2 + (1/2)*(fχ(M,r,rt)/fγtrr(M,r,rt))*f∂𝜙(rt)^2
@@ -341,7 +344,7 @@ end
 
     df[3] = (8*f[1] - 59*f[2] + 59*f[4] - 8*f[5])/(86*dx)
 
-    df[4] = (3*f[1] - 59*f[3] + 64*f[5] - 8*f[5])/(98*dx)
+    df[4] = (3*f[1] - 59*f[3] + 64*f[5] - 8*f[6])/(98*dx)
 
     for i in 5:(n - 2)
         df[i] = (f[i-2] - 8*f[i-1] + 8*f[i+1] - f[i+2])/(12*dx)
@@ -608,6 +611,10 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     @. ∂tβr = (3/4)*Br
     @. ∂tBr = ∂tΓr
 
+    for i in 1:numvar
+        @. dtstate.x[i] = 0.
+    end
+
     # Gauge choices for the evolution of the
     # determinant of the conformal metric
     # (must have v = 1 to use this)
@@ -748,7 +755,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     ∂t𝜙[1] = 0.
     #∂t𝜙[10] = -∂𝜙[10]/βr[10]
 
-    #∂t𝜙[1] = -0.05*2*K𝜙[1]*(α[1]^2 - (βr[1]^2)*γtrr[1]/χ[1])/α[1]
+    #∂t𝜙[1] = -2*K𝜙[1]*(α[1]^2 - (βr[1]^2)*γtrr[1]/χ[1])/α[1]
     #∂t𝜙[1] = -0.05*∂𝜙[1]*(α[1]^2 - (βr[1]^2)*γtrr[1]/χ[1])*χ[1]/(γtrr[1]*βr[1])
 
     #∂tK𝜙[0] = 0
@@ -889,12 +896,20 @@ function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::V
 
     @. γ = γtrr*(γtθθ^2)/χ^3
 
-    @. Er = sqrt(γ)*(βr*Sr - α*ρ)*drdrt
+    norm = ones(T,n)
+    norm[1] = 17/48
+    norm[2] = 59/48
+    norm[3] = 43/48
+    norm[4] = 49/48
+
+    @. Er = drt*norm*sqrt(γ)*(βr*Sr - α*ρ)*drdrt
+
+    #@. Er = drt*norm*sqrt(γ)*((βr*∂𝜙 - 2*K𝜙*α)^2 + (χ/γtrr)*∂𝜙^2)*drdrt
 
     E = 0
 
     for i in 1:(n-1)
-        E += (drt/2)*(Er[i] + Er[i+1])
+        E += Er[i]
     end
 
     # Constraint Equations
@@ -1146,7 +1161,7 @@ function main(points)
     # file.
     ###############################################
 
-    for i = 9:9
+    for i = 5:5
 
 
         T = Float64
@@ -1186,8 +1201,8 @@ function main(points)
 
         # α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙,p = state.x
         #reg_list = [1,3,6,7,8,9,10]
-        #reg_list = [7,8,9,10]
-        reg_list = [10]
+        reg_list = [7,8,9,10]
+        #reg_list = [10]
 
         atol = eps(T)^(T(3) / 4)
 
