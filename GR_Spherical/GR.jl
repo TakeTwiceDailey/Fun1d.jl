@@ -110,8 +110,8 @@ end
 # fArr(M,∂M,rt) = 0.
 # fK(M,∂M,rt) = 0.
 #
-# fΓr(M,r,rt) = (3*M-2*r(rt))/(r(rt)^2)
-# f∂Γr(M,r,rt) = 2*(r(rt)-3*M)/(r(rt)^3)
+# fΓtr(M,r,rt) = (3*M-2*r(rt))/(r(rt)^2)
+# f∂Γtr(M,r,rt) = 2*(r(rt)-3*M)/(r(rt)^3)
 
 # Sign for Kerr-Schild Coordinates
 # +1 for in-going, -1 for out-going (-1 doesn't work, becomes unstable)
@@ -144,8 +144,8 @@ f∂K(M,r,rt) = -s*(2*M/r(rt)^5)*(9*M^2+10*M*r(rt)+2*r(rt)^2)*fα(M,r,rt)^5
 fArr(M,r,rt) = -s*(4/3)*(M/r(rt)^3)*(2*r(rt)+3*M)*fα(M,r,rt)
 f∂Arr(M,r,rt) = s*(4/3)*(M/r(rt)^5)*(15*M^2+15*M*r(rt)+4*r(rt)^2)*fα(M,r,rt)^3
 
-fΓr(M,r,rt) = -(5*M+2*r(rt))/(r(rt)+2*M)^2
-f∂Γr(M,r,rt) = 2*(r(rt)+3*M)/(r(rt)+2*M)^3
+fΓtr(M,r,rt) = -(5*M+2*r(rt))/(r(rt)+2*M)^2
+f∂Γtr(M,r,rt) = 2*(r(rt)+3*M)/(r(rt)+2*M)^3
 
 # Minkowski with shift
 
@@ -175,8 +175,8 @@ f∂Γr(M,r,rt) = 2*(r(rt)+3*M)/(r(rt)+2*M)^3
 # fArr(M,r,rt) = -(1/sqrt(12))/r(rt)
 # f∂Arr(M,r,rt) = (1/sqrt(12))/r(rt)^2
 #
-# fΓr(M,r,rt) = -(8/3)/r(rt)
-# f∂Γr(M,r,rt) = (8/3)/r(rt)^2
+# fΓtr(M,r,rt) = -(8/3)/r(rt)
+# f∂Γtr(M,r,rt) = (8/3)/r(rt)^2
 
 # Minkowski without shift
 
@@ -206,8 +206,8 @@ f∂Γr(M,r,rt) = 2*(r(rt)+3*M)/(r(rt)+2*M)^3
 # fArr(M,r,rt) = 0
 # f∂Arr(M,r,rt) = 0
 #
-# fΓr(M,r,rt) = -2/r(rt)
-# f∂Γr(M,r,rt) = 2/r(rt)^2
+# fΓtr(M,r,rt) = -2/r(rt)
+# f∂Γtr(M,r,rt) = 2/r(rt)^2
 
 function init!(state::VarContainer{T}, param) where T
 
@@ -219,10 +219,10 @@ function init!(state::VarContainer{T}, param) where T
     init_drstate = param.init_drstate
     init_dr2state = param.init_dr2state
 
-    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙,E = state.x
-    αi,Ai,βri,Bri,χi,γtrri,γtθθi,Arri,Ki,Γri,𝜙i,K𝜙i,Ei = init_state.x
-    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γr,∂𝜙,∂K𝜙,∂E = init_drstate.x
-    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γr,∂2𝜙,∂2K𝜙,∂2E = init_dr2state.x
+    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γtr,𝜙,K𝜙,E = state.x
+    αi,Ai,βri,Bri,χi,γtrri,γtθθi,Arri,Ki,Γtri,𝜙i,K𝜙i,Ei = init_state.x
+    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γtr,∂𝜙,∂K𝜙,∂E = init_drstate.x
+    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γtr,∂2𝜙,∂2K𝜙,∂2E = init_dr2state.x
 
     grid = param.grid
     drt = spacing(grid)
@@ -299,7 +299,7 @@ function init!(state::VarContainer{T}, param) where T
     sample!(γtθθi, grid, rt -> fγtθθ(M(rt),r,rt) )
     sample!(Arri, grid, rt -> fArr(M(rt),r,rt) )
     sample!(Ki, grid, rt -> fK(M(rt),r,rt) )
-    sample!(Γri, grid, rt -> fΓr(M(rt),r,rt) )
+    sample!(Γtri, grid, rt -> fΓtr(M(rt),r,rt) )
     sample!(𝜙i, grid, f𝜙)
     sample!(K𝜙i, grid, fψ)
     sample!(Ei, grid, rt -> fβr(M(rt),r,rt)*fψ(rt) )
@@ -311,7 +311,7 @@ function init!(state::VarContainer{T}, param) where T
     sample!(∂γtθθ, grid, rt -> f∂γtθθ(M(rt),r,rt) )
     sample!(∂Arr, grid, rt -> f∂Arr(M(rt),r,rt) )
     sample!(∂K, grid, rt -> f∂K(M(rt),r,rt) )
-    sample!(∂Γr, grid, rt -> f∂Γr(M(rt),r,rt) )
+    sample!(∂Γtr, grid, rt -> f∂Γtr(M(rt),r,rt) )
     sample!(∂𝜙, grid, f𝜙)
     sample!(∂K𝜙, grid, fψ)
 
@@ -486,11 +486,11 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     # Give names to individual variables
 
-    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,ψ,Π = state.x
-    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γr,∂𝜙,∂ψ,∂Π = drstate.x
-    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γr,∂2𝜙,∂2ψ,∂2Π = dr2state.x
-    ∂tα,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrr,∂tγtθθ,∂tArr,∂tK,∂tΓr,∂t𝜙,∂tψ,∂tΠ = dtstate.x
-    ∂4α,∂4A,∂4βr,∂4Br,∂4χ,∂4γtrr,∂4γtθθ,∂4Arr,∂4K,∂4Γr,∂4𝜙,∂4ψ,∂4Π = dissipation.x
+    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γtr,𝜙,ψ,Π = state.x
+    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γtr,∂𝜙,∂ψ,∂Π = drstate.x
+    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γtr,∂2𝜙,∂2ψ,∂2Π = dr2state.x
+    ∂tα,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrr,∂tγtθθ,∂tArr,∂tK,∂tΓtr,∂t𝜙,∂tψ,∂tΠ = dtstate.x
+    ∂4α,∂4A,∂4βr,∂4Br,∂4χ,∂4γtrr,∂4γtθθ,∂4Arr,∂4K,∂4Γtr,∂4𝜙,∂4ψ,∂4Π = dissipation.x
 
     # Dirichlet boundary conditions on scalar field
 
@@ -554,7 +554,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     #
     # They are written in the order they appear in the
     # reference (arXiv:0705.3845v2) except for the ∂tBr
-    # equation since it contains a ∂tΓr term.
+    # equation since it contains a ∂tΓtr term.
     #
     #########################################################
 
@@ -574,7 +574,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
      - (2/3)*v*βr*Arr*∂γtθθ/γtθθ - (2/3)*v*Arr*∂βr + 2*Arr*∂βr
      + (2/3)*α*χ*(∂γtrr/γtrr)^2 - (1/3)*α*χ*(∂γtθθ/γtθθ)^2
      - (1/6)*α*(∂χ^2)/χ - (2/3)*α*χ*γtrr/γtθθ + βr*∂Arr
-     + (2/3)*α*χ*γtrr*∂Γr - (1/2)*α*χ*(∂γtrr/γtrr)*(∂γtθθ/γtθθ)
+     + (2/3)*α*χ*γtrr*∂Γtr - (1/2)*α*χ*(∂γtrr/γtrr)*(∂γtθθ/γtθθ)
      + (1/3)*χ*∂γtrr*∂α/γtrr + (1/3)*χ*∂α*∂γtθθ/γtθθ - (1/6)*α*∂γtrr*∂χ/γtrr
      - (1/6)*α*∂γtθθ*∂χ/γtθθ - (2/3)*∂α*∂χ - (1/3)*α*χ*∂2γtrr/γtrr
      + (1/3)*α*χ*∂2γtθθ/γtθθ - (2/3)*χ*∂2α + (1/3)*α*∂2χ)
@@ -583,9 +583,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
      + (1/2)*χ*∂γtrr*∂α/(γtrr^2) - χ*∂α*(∂γtθθ/γtθθ)/γtrr
      + (1/2)*∂α*∂χ/γtrr - χ*∂2α/γtrr)
 
-    @. ∂tΓr = (-v*βr*((∂γtθθ/γtθθ)^2)/γtrr + α*Arr*(∂γtθθ/γtθθ)/(γtrr^2)
+    @. ∂tΓtr = (-v*βr*((∂γtθθ/γtθθ)^2)/γtrr + α*Arr*(∂γtθθ/γtθθ)/(γtrr^2)
      - (1/3)*v*∂βr*(∂γtθθ/γtθθ)/γtrr + ∂βr*(∂γtθθ/γtθθ)/γtrr
-     + βr*∂Γr + α*Arr*∂γtrr/(γtrr^3) - (4/3)*α*∂K/γtrr
+     + βr*∂Γtr + α*Arr*∂γtrr/(γtrr^3) - (4/3)*α*∂K/γtrr
      - 2*Arr*∂α/(γtrr^2) + (1/2)*v*∂βr*∂γtrr/(γtrr^2)
      - (1/2)*∂βr*∂γtrr/(γtrr^2) - 3*α*Arr*(∂χ/χ)/(γtrr^2)
      + (1/6)*v*βr*∂2γtrr/(γtrr^2) + (1/3)*v*βr*(∂2γtθθ/γtθθ)/γtrr
@@ -598,7 +598,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     @. ∂tA = ∂tK
 
     @. ∂tβr = (3/4)*Br
-    @. ∂tBr = ∂tΓr
+    @. ∂tBr = ∂tΓtr
 
     for i in 1:numvar
         @. dtstate.x[i] = 0.
@@ -626,7 +626,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # @. ∂tγtrr += (1/3)*γtrr*∂tlnγt
     # @. ∂tγtθθ += (1/3)*γtθθ*∂tlnγt
     # @. ∂tArr += (1/3)*Arr*∂tlnγt
-    # @. ∂tΓr += -(1/3)*Γr*∂tlnγt - (1/6)*(χ/γtrr)*∂r∂tlnγt
+    # @. ∂tΓtr += -(1/3)*Γtr*∂tlnγt - (1/6)*(χ/γtrr)*∂r∂tlnγt
 
     #########################################################
     # Source Terms and Source Evolution
@@ -644,20 +644,44 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     #     - (1/2)*(α*χ/γtrr)*(∂2𝜙 + ∂𝜙*(∂γtθθ/γtθθ - (1/2)*∂γtrr/γtrr
     #     - (1/2)*(∂χ/χ))))
 
-    @. ∂t𝜙 = Π
+    # Γt = temp.x[5]
+    # Γr = temp.x[6]
+    #
+    # M = 1.
+    # @. Γt = -2*M/r^2
+    # @. Γr = 2*(M-r)/r^2
+    #
+    # @. ∂t𝜙 = Π
+    # @. ∂tψ = ∂Π
+    #
+    # # @. ∂tΠ = (2*βr*∂Π + ∂βr*Π - 2*βr*ψ*∂βr - βr*Π*∂α/α + (βr^2)*ψ*∂α/α
+    # #  + α*χ*ψ*∂α/γtrr + (1/2)*βr*Π*∂γtrr/γtrr - (1/2)*(βr^2)*ψ*∂γtrr/γtrr
+    # #  - (1/2)*(α^2)*χ*ψ*∂γtrr/γtrr^2 + βr*Π*∂γtθθ/γtθθ - (βr^2)*ψ*∂γtθθ/γtθθ
+    # #  + (α^2)*χ*ψ*∂γtθθ/(γtθθ*γtrr) - (3/2)*βr*Π*∂χ/χ - (1/2)*(α^2)*ψ*∂χ/γtrr
+    # #  + (3/2)*(βr^2)*ψ*∂χ/χ - (βr^2)*∂ψ + (α^2)*χ*∂ψ/γtrr)
+    #
+    # @. ∂tΠ = (α^2)*((χ/γtrr-(βr/α)^2)*∂ψ + 2*(βr/α^2)*∂Π - Γr*∂𝜙 - Γt*Π - m^2*𝜙)
 
-    @. ∂tψ = ∂Π
+    g = temp.x[5]
 
-    @. ∂tΠ = (2*βr*∂Π + ∂βr*Π - 2*βr*ψ*∂βr - βr*Π*∂α/α + (βr^2)*ψ*∂α/α
-     + α*χ*ψ*∂α/γtrr + (1/2)*βr*Π*∂γtrr/γtrr - (1/2)*(βr^2)*ψ*∂γtrr/γtrr
-     - (1/2)*(α^2)*χ*ψ*∂γtrr/γtrr^2 + βr*Π*∂γtθθ/γtθθ - (βr^2)*ψ*∂γtθθ/γtθθ
-     + (α^2)*χ*ψ*∂γtθθ/(γtθθ*γtrr) - (3/2)*βr*Π*∂χ/χ - (1/2)*(α^2)*ψ*∂χ/γtrr
-     + (3/2)*(βr^2)*ψ*∂χ/χ - (βr^2)*∂ψ + (α^2)*χ*∂ψ/γtrr)
+    @. g = -α^2*γtrr*γtθθ^2/χ^3
 
-    ρ = temp.x[5]
-    Sr = temp.x[6]
-    S = temp.x[7]
-    Srr = temp.x[8]
+    ut = ψ
+    ur = Π
+    ∂ut = ∂ψ
+    ∂ur = ∂Π
+    ∂tut = ∂tψ
+    ∂tur = ∂tΠ
+
+    @. ∂t𝜙 = (-(α^2-γtrr*(βr)^2/χ)*ut + (γtrr*βr/χ)*ur)/sqrt(-g)
+    @. ∂tur = (βr^2 - χ*α^2/γtrr)*∂ut + 2*βr*∂ur + (2/r)*ut - (6*M/r^2)*(ur + ut)
+    @. ∂tut = -∂ur + m^2*𝜙
+
+
+    ρ = temp.x[7]
+    Sr = temp.x[8]
+    S = temp.x[9]
+    Srr = temp.x[10]
 
     @. ρ = (1/2)*(Π - βr*ψ)^2/α^2 + (1/2)*(χ/γtrr)*ψ^2 + (1/2)*(m^2)*𝜙^2
     #Lower Index
@@ -667,7 +691,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     # @. ∂tArr += -8*pi*α*(χ*Srr - (1/3)*S*γtrr)
     # @. ∂tK += 4*pi*α*(ρ + S)
-    # @. ∂tΓr += -16*pi*α*Sr/γtrr
+    # @. ∂tΓtr += -16*pi*α*Sr/γtrr
 
     # fr = param.r
     #
@@ -677,7 +701,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # fγtθθ(rt) = fr(rt)^2
     # fArr(M,∂M,rt) = (4/3)*(fr(rt)*(M+fr(rt))*∂M-M*(3*M+2*fr(rt)))/real(((fr(rt)^5)*(fr(rt)+2*M)+0im)^(1/2))
     # fK(M,∂M,rt) = (2*M*(3*M+fr(rt))+2*fr(rt)*∂M*(M+fr(rt)))/real((fr(rt)*(fr(rt)+2*M)+0im)^(3/2))
-    # fΓr(M,∂M,rt) = (fr(rt)*∂M-2*fr(rt)-5*M)/(fr(rt)+2*M)^2
+    # fΓtr(M,∂M,rt) = (fr(rt)*∂M-2*fr(rt)-5*M)/(fr(rt)+2*M)^2
     #
     # f∂α(M,rt) = M*real((fr(rt)*(fr(rt)+2*M+0im)^3)^(-1/2))
     # f∂βr(M,rt) = -2*M/(fr(rt)+2*M)^2
@@ -685,7 +709,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # f∂γtθθ(rt) = 2*fr(rt)
     # f∂Arr(M,rt) = (4*M/3)*(15*M^2+15*M*fr(rt)+4*fr(rt)^2)/real(((fr(rt)^7)*((fr(rt)+2*M)^3)+0im)^(1/2))
     # f∂K(M,rt) = -2*M*(9*M^2+10*M*fr(rt)+2*fr(rt)^2)/real((fr(rt)*(fr(rt)+2*M)+0im)^(5/2))
-    # f∂Γr(M,rt) = 2*(fr(rt)+3*M)/(fr(rt)+2*M)^3
+    # f∂Γtr(M,rt) = 2*(fr(rt)+3*M)/(fr(rt)+2*M)^3
     #
     # rt = sample(Float64, A.grid, rt->rt)
     #
@@ -700,11 +724,13 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # ∂tγtθθ[1:2] .= (γtθθ[1:2] .- fγtθθ.(rt[1:2]))./r[1:2] + ∂γtθθ[1:2] - f∂γtθθ.(rt[1:2])
     # ∂tArr[1:2] .= (Arr[1:2] .- fArr.(1.,0.,rt[1:2]))./r[1:2] + ∂Arr[1:2] - f∂Arr.(1.,rt[1:2])
     # ∂tK[1:2] .= (K[1:2] .- fK.(1.,0.,rt[1:2]))./r[1:2] + ∂K[1:2] - f∂K.(1.,rt[1:2])
-    # ∂tΓr[1:2] .= (Γr[1:2] .- fΓr.(1.,0.,rt[1:2]))./r[1:2] + ∂Γr[1:2] - f∂Γr.(1.,rt[1:2])
+    # ∂tΓtr[1:2] .= (Γtr[1:2] .- fΓtr.(1.,0.,rt[1:2]))./r[1:2] + ∂Γtr[1:2] - f∂Γtr.(1.,rt[1:2])
     # ∂t𝜙[1:2] .= (𝜙[1:2] .- 0.)./r[1:2] + ∂𝜙[1:2]
     # ∂tK𝜙[1:2] .= (K𝜙[1:2] .- 0.)./r[1:2] + ∂K𝜙[1:2]
 
     ######################################################
+
+
 
     # Specify the inner temporal boundary conditions
 
@@ -712,15 +738,30 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         dtstate.x[i][1] = 0.
     end
 
+    c_p = α[1]*sqrt(χ[1]/γtrr[1]) - βr[1]
+    c_m = -α[1]*sqrt(χ[1]/γtrr[1]) - βr[1]
+    c_in = -1
+
+    gtt = -1/α[1]^2
+    grt = βr[1]/α[1]^2
+    grr = χ[1]/γtrr[1] - (βr[1]/α[1])^2
+
+    ∂t𝜙[1] = 0
+    ∂tut[1] = -∂ur[1] + c_in*(gtt*∂ut[1] - 2*grt*∂ur[1])/(grr*gtt)
+    #∂tψ[1] = ∂Π[1]
+    ∂tur[1] = 0
+
+
     # Calculate the numerical dissipation
 
     # Magnitude of dissipation
-    σ = 0.2
+    σ = 0.3
 
     for i in 1:numvar
         dissipation!(dissipation.x[i],state.x[i],drdrt,n)
         @. dtstate.x[i] += σ*dissipation.x[i]/16
     end
+
 
     # σ1 = -2
     # σ2 = -2
@@ -730,10 +771,6 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # ∂t𝜙[1] += (48/17)*σ1*𝜙[1]/drt
     # ∂tψ[1] += (48/17)*σ2*ψ[1]/drt
     # ∂tΠ[1] += (48/17)*σ3*Π[1]/drt
-
-    ∂t𝜙[1] = 0
-    #∂tψ[1] = 0
-    ∂tΠ[1] = 0
 
     # Convert back to regularized variables
     # for the time derivatives
@@ -783,9 +820,9 @@ function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::V
 
     # Unpack Variables
 
-    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,ψ,Π = state.x
-    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γr,∂𝜙,∂ψ,∂Π = drstate.x
-    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γr,∂2𝜙,∂2ψ,∂2Π = dr2state.x
+    α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γtr,𝜙,ψ,Π = state.x
+    ∂α,∂A,∂βr,∂Br,∂χ,∂γtrr,∂γtθθ,∂Arr,∂K,∂Γtr,∂𝜙,∂ψ,∂Π = drstate.x
+    ∂2α,∂2A,∂2βr,∂2Br,∂2χ,∂2γtrr,∂2γtθθ,∂2Arr,∂2K,∂2Γtr,∂2𝜙,∂2ψ,∂2Π = dr2state.x
 
     init_state = param.init_state
     init_drstate = param.init_drstate
@@ -807,7 +844,7 @@ function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::V
     deriv!(∂γtθθ,γtθθ,n,drt)
     deriv!(∂Arr,Arr,n,drt)
     deriv!(∂K,K,n,drt)
-    deriv!(∂Γr,Γr,n,drt)
+    deriv!(∂Γtr,Γtr,n,drt)
 
     deriv2!(∂2χ,χ,n,drt)
     deriv2!(∂2γtrr,γtrr,n,drt)
@@ -818,7 +855,7 @@ function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::V
     ∂γtθθ ./= drdrt
     ∂Arr ./= drdrt
     ∂K ./= drdrt
-    ∂Γr ./= drdrt
+    ∂Γtr ./= drdrt
 
     @. ∂2χ = (∂2χ - d2rdrt*∂χ)/(drdrt^2)
     @. ∂2γtrr = (∂2γtrr - d2rdrt*∂γtrr)/(drdrt^2)
@@ -895,7 +932,7 @@ function constraints(state::VarContainer{T},drstate::VarContainer{T},dr2state::V
      + (3/2)*Arr.*(∂γtθθ./γtθθ)./γtrr - Arr.*∂γtrr./(γtrr.^2)
      - 8*pi*Sr)
 
-    𝓖r = -(1/2)*∂γtrr./(γtrr.^2) + Γr + (∂γtθθ./γtθθ)./γtrr
+    𝓖r = -(1/2)*∂γtrr./(γtrr.^2) + Γtr + (∂γtθθ./γtθθ)./γtrr
 
     return (𝓗, 𝓜r, 𝓖r, E)
 
@@ -984,7 +1021,7 @@ function custom_progress_message(dt,state::VarContainer{T},param,t) where T
 
     dtstate = param.dtstate::VarContainer{T}
 
-    ∂tα,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrr,∂tγtθθ,∂tArr,∂tK,∂tΓr,∂t𝜙,∂tK𝜙 = dtstate.x
+    ∂tα,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrr,∂tγtθθ,∂tArr,∂tK,∂tΓtr,∂t𝜙,∂tK𝜙 = dtstate.x
 
     println("  ",
     #rpad(string(param[1]),6," "),
@@ -998,7 +1035,7 @@ function custom_progress_message(dt,state::VarContainer{T},param,t) where T
     # rpad(string(round(maximum(abs.(derivstate.𝜙)),digits=3)),12," "),
     # rpad(string(round(maximum(abs.(derivstate.K𝜙)),digits=3)),14," ")
     rpad(string(round(maximum(abs.(∂tK)),digits=3)),12," "),
-    rpad(string(round(maximum(abs.(∂tΓr)),digits=3)),14," ")
+    rpad(string(round(maximum(abs.(∂tΓtr)),digits=3)),14," ")
     )
 
     #PrettyTables.jl
@@ -1022,8 +1059,8 @@ function solution_saver(T,grid,sol,param,folder)
         rm(old_files[i])
     end
 
-    vars = (["α","A","βr","Br","χ","γtrr","γtθθ","Arr","K","Γr","𝜙","ψ","Π",
-    "∂tα","∂tA","∂tβr","∂tBr","∂tχ","∂tγtrr","∂tγtθθ","∂tArr","∂tK","∂tΓr","∂t𝜙","∂tψ",
+    vars = (["α","A","βr","Br","χ","γtrr","γtθθ","Arr","K","Γtr","𝜙","ψ","Π",
+    "∂tα","∂tA","∂tβr","∂tBr","∂tχ","∂tγtrr","∂tγtθθ","∂tArr","∂tK","∂tΓtr","∂t𝜙","∂tψ",
     "∂tΠ","H","Mr","Gr","E","appHorizon"])
     varlen = length(vars)
     #mkdir(string("data\\",folder))
@@ -1040,7 +1077,7 @@ function solution_saver(T,grid,sol,param,folder)
 
     # for i in 1:tlen
     #
-    #     αreg,A,βr,Br,χ,γtrrreg,γtθθreg,Arrreg,Kreg,Γr,𝜙,K𝜙 = sol[i].x
+    #     αreg,A,βr,Br,χ,γtrrreg,γtθθreg,Arrreg,Kreg,Γtr,𝜙,K𝜙 = sol[i].x
     #
     #     # Conversions from regularized variables to canonical variables
     #     α = real((1 .+ αreg./r .+ 0im).^(-1/2))
@@ -1049,7 +1086,7 @@ function solution_saver(T,grid,sol,param,folder)
     #     K = sqrt.(r.^(-3)).*Kreg
     #     Arr = sqrt.(r.^(-5)).*Arrreg
     #
-    #     state[i] = ArrayPartition(α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙)
+    #     state[i] = ArrayPartition(α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γtr,𝜙,K𝜙)
     #     derivs[i] = param.dtstate
     #     rhs!(derivs[i],sol[i],param,0)
     #     #cons[i,1:4] .= constraints!(T,state[i],dstate[i],d2state[i],param)
@@ -1180,7 +1217,7 @@ function main(points)
 
         Mtot = 1.
 
-        # α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γr,𝜙,K𝜙,p = state.x
+        # α,A,βr,Br,χ,γtrr,γtθθ,Arr,K,Γtr,𝜙,K𝜙,p = state.x
         reg_list = [1,3,6,7,8,9,10]
         #reg_list = [7,8,9,10]
         #reg_list = [10]
@@ -1234,7 +1271,7 @@ function main(points)
         #println("Starting Solution...")
 
         println("")
-        println("| Time | max α'(t) | max χ'(t) | max γtrr'(t) | max γtθθ'(t) | max Arr'(t) | max K'(t) | max Γr'(t) |")
+        println("| Time | max α'(t) | max χ'(t) | max γtrr'(t) | max γtθθ'(t) | max Arr'(t) | max K'(t) | max Γtr'(t) |")
         println("|______|___________|___________|______________|______________|_____________|___________|____________|")
         println("")
 
@@ -1368,7 +1405,7 @@ end
 #
 #     # ∂tArr .+= -8*pi*α.*(χ.*Srr - (1/3)*S.*γtrr)
 #     # ∂tK .+= 4*pi*α.*(ρ + S)
-#     # ∂tΓr .+= -16*pi*α.*Sr./γtrr
+#     # ∂tΓtr .+= -16*pi*α.*Sr./γtrr
 #
 #     # Inner temporal boundary Conditions
 #
@@ -1381,10 +1418,10 @@ end
 #     # ∂tγtθθ[1:2] .= 0.
 #     # ∂tArr[1:2] .= 0.
 #     # ∂tK[1:2] .= 0.
-#     # ∂tΓr[1:2] .= 0.
+#     # ∂tΓtr[1:2] .= 0.
 #     # ∂t𝜙[1:2] .= 0.
 #     # ∂tK𝜙[1:2] .= 0.
 #
-#     return GBSSN_Variables(∂tαreg,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrrreg,∂tγtθθreg,∂tArrreg,∂tKreg,∂tΓr,∂t𝜙,∂tK𝜙)
+#     return GBSSN_Variables(∂tαreg,∂tA,∂tβr,∂tBr,∂tχ,∂tγtrrreg,∂tγtθθreg,∂tArrreg,∂tKreg,∂tΓtr,∂t𝜙,∂tK𝜙)
 #
 # end
