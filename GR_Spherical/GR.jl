@@ -536,9 +536,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         @. dr2state.x[i] = ∂2reg*init_state.x[i] + 2*∂reg*init_drstate.x[i] + reg*init_dr2state.x[i]
     end
 
-    # Dirichlet boundary conditions on scalar field
+    # Constraint
 
-    ∂𝜙[1] = ψ[1]
+    #@. ∂𝜙 = ψ
 
     #########################################################
     # Evolution Equations
@@ -693,14 +693,14 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     c_p = α[1]*sqrt(χ[1]/γtrr[1]) - βr[1]
     c_m = -α[1]*sqrt(χ[1]/γtrr[1]) - βr[1]
-    c_in = -0
+    c_in = 0
 
     gtt = -1/α[1]^2
     grt = βr[1]/α[1]^2
     grr = χ[1]/γtrr[1] - (βr[1]/α[1])^2
 
     ∂t𝜙[1] = 0
-    ∂tψ[1] = ∂Π[1] + c_in*(-2*grt*∂Π[1] - grr*∂ψ[1] + Γr[1]*∂𝜙[1])#/grr
+    ∂tψ[1] = ∂Π[1] + c_in*(-2*grt*∂Π[1] - grr*∂ψ[1] + Γr[1]*ψ[1])/grr
     #∂tψ[1] = ∂Π[1]
     #∂tψ[1] = 0
     ∂tΠ[1] = 0
