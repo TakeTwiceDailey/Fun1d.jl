@@ -103,25 +103,25 @@ f∂rαt(M,r,rt) = -(2/r(rt)^2)*(M(rt)+r(rt))/(r(rt)+2*M(rt))^2
 f∂r2αt(M,r,rt) = 1/(M(rt)*r(rt)^3) - 1/(M(rt)*(2*M(rt)+r(rt))^3)
 
 fβr(M,r,rt) = 2*M(rt)/(2*M(rt)+r(rt))
-f∂rβr(M,r,rt) = -2*M/((r(rt)+2*M)^2)
-f∂r2βr(M,r,rt) = 4*M/((r(rt)+2*M)^3)
+f∂rβr(M,r,rt) = -2*M(rt)/((r(rt)+2*M(rt))^2)
+f∂r2βr(M,r,rt) = 4*M(rt)/((r(rt)+2*M(rt))^3)
 
 fγrr(M,r,rt) = 1 + 2*M(rt)/r(rt)
-f∂rγrr(M,r,rt) = -2*M/(r(rt)^2)
-f∂r2γrr(M,r,rt) = 4*M/(r(rt)^3)
+f∂rγrr(M,r,rt) = -2*M(rt)/(r(rt)^2)
+f∂r2γrr(M,r,rt) = 4*M(rt)/(r(rt)^3)
 
 fγθθ(M,r,rt) = r(rt)^2
 f∂rγθθ(M,r,rt) = 2*r(rt)
 f∂r2γθθ(M,r,rt) = 2.
 
 fKrr(M,∂M,r,rt) = (2*(r(rt)*∂M(rt)-M(rt))/r(rt)^3)*(r(rt)+M(rt))/sqrt((1+2*M(rt)/r(rt)))
-f∂rKrr(M,r,rt) = (2*M/r(rt)^3)*(5*M^2+6*M*r(rt)+2*r(rt)^2)*sqrt((1+2*M/r(rt)))/(r(rt)+2*M)^2
+f∂rKrr(M,r,rt) = (2*M(rt)/r(rt)^3)*(5*M(rt)^2+6*M(rt)*r(rt)+2*r(rt)^2)*sqrt((1+2*M(rt)/r(rt)))/(r(rt)+2*M(rt))^2
 
 fKθθ(M,r,rt) = 2*M(rt)/sqrt((1+2*M(rt)/r(rt)))
-f∂rKθθ(M,r,rt) = (2*M^2/r(rt)^2)/sqrt((1+2*M/r(rt)))^3
+f∂rKθθ(M,r,rt) = (2*M(rt)^2/r(rt)^2)/sqrt((1+2*M(rt)/r(rt)))^3
 
-ffrrr(M,∂M,r,rt) = (7*M + (4 + ∂M(rt))*r(rt))/(r(rt)^2)
-f∂rfrrr(M,r,rt) = -2*(7*M + 2*r(rt))/(r(rt)^3)
+ffrrr(M,∂M,r,rt) = (7*M(rt) + (4 + ∂M(rt))*r(rt))/(r(rt)^2)
+f∂rfrrr(M,r,rt) = -2*(7*M(rt) + 2*r(rt))/(r(rt)^3)
 
 ffrθθ(M,r,rt) = r(rt)
 f∂rfrθθ(M,r,rt) = 1.
@@ -245,32 +245,33 @@ function init!(state::VarContainer{T}, param) where T
 
     #∂M(rt) = f∂M(M(rt),rt)
     M(rt) = 1.0
+    ∂M(rt) = 0.0
 
-    sample!(αt, grid, rt -> fαt(M(rt),r,rt) )
-    sample!(βr, grid, rt -> fβr(M(rt),r,rt) )
-    sample!(γrri, grid, rt -> fγrr(M(rt),r,rt) )
-    sample!(γθθi, grid, rt -> fγθθ(M(rt),r,rt) )
-    sample!(Krri, grid, rt -> fKrr(M(rt),r,rt) )
-    sample!(Kθθi, grid, rt -> fKθθ(M(rt),r,rt) )
-    sample!(frrri, grid, rt -> ffrrr(M(rt),r,rt) )
-    sample!(frθθi, grid, rt -> ffrθθ(M(rt),r,rt) )
+    sample!(αt, grid, rt -> fαt(M,r,rt) )
+    sample!(βr, grid, rt -> fβr(M,r,rt) )
+    sample!(γrri, grid, rt -> fγrr(M,r,rt) )
+    sample!(γθθi, grid, rt -> fγθθ(M,r,rt) )
+    sample!(Krri, grid, rt -> fKrr(M,∂M,r,rt) )
+    sample!(Kθθi, grid, rt -> fKθθ(M,r,rt) )
+    sample!(frrri, grid, rt -> ffrrr(M,∂M,r,rt) )
+    sample!(frθθi, grid, rt -> ffrθθ(M,r,rt) )
     sample!(𝜙i, grid, f𝜙)
     sample!(ψi, grid, fψ)
     sample!(Πi, grid, fΠ)
 
-    sample!(∂rαt, grid, rt -> f∂rαt(M(rt),r,rt) )
-    sample!(∂rβr, grid, rt -> f∂rβr(M(rt),r,rt) )
-    sample!(∂rγrr, grid, rt -> f∂rγrr(M(rt),r,rt) )
-    sample!(∂rγθθ, grid, rt -> f∂rγθθ(M(rt),r,rt) )
-    sample!(∂rKrr, grid, rt -> f∂rKrr(M(rt),r,rt) )
-    sample!(∂rKθθ, grid, rt -> f∂rKθθ(M(rt),r,rt) )
-    sample!(∂rfrrr, grid, rt -> f∂rfrrr(M(rt),r,rt) )
-    sample!(∂rfrθθ, grid, rt -> f∂rfrθθ(M(rt),r,rt) )
+    sample!(∂rαt, grid, rt -> f∂rαt(M,r,rt) )
+    sample!(∂rβr, grid, rt -> f∂rβr(M,r,rt) )
+    sample!(∂rγrr, grid, rt -> f∂rγrr(M,r,rt) )
+    sample!(∂rγθθ, grid, rt -> f∂rγθθ(M,r,rt) )
+    sample!(∂rKrr, grid, rt -> f∂rKrr(M,r,rt) )
+    sample!(∂rKθθ, grid, rt -> f∂rKθθ(M,r,rt) )
+    sample!(∂rfrrr, grid, rt -> f∂rfrrr(M,r,rt) )
+    sample!(∂rfrθθ, grid, rt -> f∂rfrθθ(M,r,rt) )
 
-    sample!(∂r2αt, grid, rt -> f∂r2αt(M(rt),r,rt) )
-    sample!(∂r2βr, grid, rt -> f∂r2βr(M(rt),r,rt) )
-    sample!(∂r2γrr, grid, rt -> f∂r2γrr(M(rt),r,rt) )
-    sample!(∂r2γθθ, grid, rt -> f∂r2γθθ(M(rt),r,rt) )
+    sample!(∂r2αt, grid, rt -> f∂r2αt(M,r,rt) )
+    sample!(∂r2βr, grid, rt -> f∂r2βr(M,r,rt) )
+    sample!(∂r2γrr, grid, rt -> f∂r2γrr(M,r,rt) )
+    sample!(∂r2γθθ, grid, rt -> f∂r2γθθ(M,r,rt) )
     sample!(∂r2𝜙, grid, f𝜙)
 
     s = 10^(-10)
@@ -280,11 +281,13 @@ function init!(state::VarContainer{T}, param) where T
             for j in 1:n
                state.x[i][j] = 1. + s*rand(Uniform(-1,1))
             end
+            state.x[i][1] = 1.
             state.x[i][n] = 1.
         else
             for j in 1:n
                state.x[i][j] = init_state.x[i][j] + s*rand(Uniform(-1,1))
             end
+            state.x[i][1] = init_state.x[i][1]
             state.x[i][n] = init_state.x[i][n]
         end
     end
@@ -349,8 +352,8 @@ end
 
     df[n] = (-48*f[n] + 96*f[n-1] - 48*f[n-2])/(17)
 
-    # df[1:4] .= 0.
-    #df[n] = 0.
+    # df[1] = 0.
+    # df[n] = 0.
 
 end
 
@@ -518,25 +521,25 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     @. ∂tψ = 0
     @. ∂tΠ = 0
 
-    Γt = temp.x[5]; Γr = temp.x[6];
+    # Γt = temp.x[5]; Γr = temp.x[6];
+    #
+    # M = 1.
+    # @. Γt = -2*M/r^2
+    # @. Γr = 2*(M-r)/r^2
+    #
+    # @. ∂t𝜙 = Π
+    # @. ∂tψ = ∂Π
+    # @. ∂tΠ = (α^2)*((1/γrr-(βr/α)^2)*∂rψ + 2*(βr/α^2)*∂rΠ - Γr*∂𝜙 - Γt*Π - m^2*𝜙)
 
-    M = 1.
-    @. Γt = -2*M/r^2
-    @. Γr = 2*(M-r)/r^2
-
-    @. ∂t𝜙 = Π
-    @. ∂tψ = ∂Π
-    @. ∂tΠ = (α^2)*((1/γrr-(βr/α)^2)*∂ψ + 2*(βr/α^2)*∂Π - Γr*∂𝜙 - Γt*Π - m^2*𝜙)
-
-    Sr = temp.x[1]; T = temp.x[2]; Srr = temp.x[3]; Sθθ = temp.x[5];
+    Sr = temp.x[1]; Tt = temp.x[2]; Srr = temp.x[3]; Sθθ = temp.x[5];
 
     @. Sr = -ψ*(Π - βr*ψ)/α
-    @. T = (Π - βr*ψ)^2/α^2 - ψ^2/γrr - 2*(m^2)*𝜙^2
+    @. Tt = (Π - βr*ψ)^2/α^2 - ψ^2/γrr - 2*(m^2)*𝜙^2
     @. Srr = γrr*( (Π - βr*ψ)^2/α^2 + ψ^2/γrr - (m^2)*𝜙^2)/2
     @. Sθθ = γθθ*( (Π - βr*ψ)^2/α^2 - ψ^2/γrr - (m^2)*𝜙^2)/2
 
-    @. ∂tKrr += 4*pi*α*(γrr*T - 2*Srr)
-    @. ∂tKθθ += 4*pi*α*(γθθ*T - 2*Sθθ)
+    @. ∂tKrr += 4*pi*α*(γrr*Tt - 2*Srr)
+    @. ∂tKθθ += 4*pi*α*(γθθ*Tt - 2*Sθθ)
     @. ∂tfrrr += 16*pi*α*γrr*Sr
 
     # Specify the outer temporal boundary conditions
@@ -544,6 +547,19 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # for i in 1:numvar
     #     dtstate.x[i][n] = 0.
     # end
+    αi = αt[1]*γθθi[1]*sqrt(γrri[1])
+    c = -βr[1] - α[1]/sqrt(γrr[1])
+    ci = -βr[1] - αi/sqrt(γrri[1])
+    ∂tγrri = βr[1]*∂rγrri[1]
+    ∂tγθθi = βr[1]*∂rγθθi[1]
+    ∂tKrri = -ci*(∂rKrri[1] - ∂rfrrri[1]/sqrt(γrri[1]))/2
+    ∂tKθθi = -ci*(∂rKθθi[1] - ∂rfrθθi[1]/sqrt(γrri[1]))/2
+    ∂tγrr[1] = βr[1]*∂rγrr[1] - ∂tγrri
+    ∂tγθθ[1] = βr[1]*∂rγθθ[1] - ∂tγθθi
+    ∂tKrr[1] = -c*(∂rKrr[1] - ∂rfrrr[1]/sqrt(γrr[1]))/2 - ∂tKrri
+    ∂tKθθ[1] = -c*(∂rKθθ[1] - ∂rfrθθ[1]/sqrt(γrr[1]))/2 - ∂tKθθi
+    ∂tfrrr[1] = -sqrt(γrr[1])*∂tKrr[1]
+    ∂tfrθθ[1] = -sqrt(γrr[1])*∂tKθθ[1]
 
     αi = αt[n]*γθθi[n]*sqrt(γrri[n])
     c = -βr[n] + α[n]/sqrt(γrr[n])
@@ -651,9 +667,9 @@ function constraints(regstate::VarContainer{T},param) where T
         @. drstate.x[i] = ∂reg*init_state.x[i] + reg*init_drstate.x[i]
     end
 
-    ρ = temp.x[4]
-    Sr = temp.x[5]
+    α = temp.x[4]; ρ = temp.x[5]; Sr = temp.x[6]
 
+    @. α = αt*γθθ*sqrt(γrr)
     @. ρ = ( (Π - βr*ψ)^2/α^2 + ψ^2/γrr + (m^2)*𝜙^2)/2
     #Lower Index
     @. Sr = -ψ*(Π - βr*ψ)/α
@@ -850,7 +866,7 @@ function main(points,folder)
         T = Float64
 
         #rtspan = T[2.,22.] .+ (1.0 - 0.1*i)
-        rtspan = T[1.5,11.5]
+        rtspan = T[3.0,13.0]
         rtmin, rtmax = rtspan
         rspan = T[rtmin,rtmax]
 
@@ -880,7 +896,7 @@ function main(points,folder)
         tspan = T[0., 100.]
         tmin, tmax = tspan
 
-        printtimes = 2.
+        printtimes = 1.
 
         v = 1.
 
