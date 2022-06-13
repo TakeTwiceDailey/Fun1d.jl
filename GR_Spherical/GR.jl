@@ -12,8 +12,9 @@ using Roots
 #using BenchmarkTools
 using InteractiveUtils
 using RecursiveArrayTools
-#using StaticArrays
+using SparseArrays
 using LinearAlgebra
+using BandedMatrices
 
 using Distributions
 
@@ -52,11 +53,20 @@ struct Param{T}
     gauge::VarContainer{T}
     init_state::VarContainer{T}
     init_drstate::VarContainer{T}
+#    init_dr2state::VarContainer{T}
     state::VarContainer{T}
     drstate::VarContainer{T}
     dtstate::VarContainer{T}
     dissipation::VarContainer{T}
     temp::VarContainer{T}
+    B2::SparseMatrixCSC{T, Int64}
+    D2::SparseMatrixCSC{T, Int64}
+    Σi::SparseMatrixCSC{T, Int64}
+end
+
+struct test{T}
+    n::T
+    Mat::Array
 end
 
 @inline function Base.similar(::Type{ArrayPartition},::Type{T},size::Int) where T
@@ -98,15 +108,11 @@ end
 
 r0 = 5.
 σr = 0.1
-Amp = 0.00001
+Amp = 0.00000
 
 fᾶ(M,r,r̃) = 1/(r(r̃)^2 + 2*M(r̃)*r(r̃)) + Amp*exp(-(1/2)*((r(r̃)-r0)/σr)^2)
 f∂r̃ᾶ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fᾶ(M,r,r̃), r̃)
 f∂r̃2ᾶ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃ᾶ(M,r,r̃), r̃)
-
-# fβr(M,r,r̃) = 2*M(r̃)/(2*M(r̃)+r(r̃))
-# f∂r̃βr(M,r,r̃) = ForwardDiff.derivative(r̃ -> fβr(M,r,r̃), r̃)
-# f∂r̃2βr(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃βr(M,r,r̃), r̃)
 
 fβr(M,r,r̃) = 2*M(r̃)/(2*M(r̃)+r(r̃))
 f∂r̃βr(M,r,r̃) = ForwardDiff.derivative(r̃ -> fβr(M,r,r̃), r̃)
@@ -114,22 +120,27 @@ f∂r̃2βr(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃βr(M,r,r̃), r̃)
 
 fγrr(M,r,r̃) = 1 + 2*M(r̃)/r(r̃)
 f∂r̃γrr(M,r,r̃) = ForwardDiff.derivative(r̃ -> fγrr(M,r,r̃), r̃)
+f∂r̃2γrr(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃γrr(M,r,r̃), r̃)
 
 fγθθ(M,r,r̃) = r(r̃)^2
 f∂r̃γθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fγθθ(M,r,r̃), r̃)
+f∂r̃2γθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃γθθ(M,r,r̃), r̃)
 
 fKrr(M,∂rM,r,r̃) = (2*(r(r̃)*∂rM(r̃)-M(r̃))/r(r̃)^3)*(r(r̃)+M(r̃))/sqrt((1+2*M(r̃)/r(r̃)))
 f∂r̃Krr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> fKrr(M,∂rM,r,r̃), r̃)
+f∂r̃2Krr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃Krr(M,∂rM,r,r̃), r̃)
 
 fKθθ(M,r,r̃) = 2*M(r̃)/sqrt((1+2*M(r̃)/r(r̃)))
 f∂r̃Kθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fKθθ(M,r,r̃), r̃)
+f∂r̃2Kθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃Kθθ(M,r,r̃), r̃)
 
 ffrrr(M,∂rM,r,r̃) = (7*M(r̃) + (4 + ∂rM(r̃))*r(r̃))/(r(r̃)^2)
 f∂r̃frrr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> ffrrr(M,∂rM,r,r̃), r̃)
+f∂r̃2frrr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃frrr(M,∂rM,r,r̃), r̃)
 
 ffrθθ(M,r,r̃) = r(r̃)
 f∂r̃frθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> ffrθθ(M,r,r̃), r̃)
-
+f∂r̃2frθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃frθθ(M,r,r̃), r̃)
 
 function init!(state::VarContainer{T}, param) where T
 
@@ -161,7 +172,6 @@ function init!(state::VarContainer{T}, param) where T
 
     # Mass (no real reason not to use 1 here)
     #M = 1
-
 
     #min = 5
     # f𝜙(M,r,r̃) = 0.
@@ -259,90 +269,82 @@ function init!(state::VarContainer{T}, param) where T
 
 end
 
-q11 = -2.09329763466349871588733
-q21 = 4.0398572053206615302160
-q31 = -3.0597858079809922953240
-q41 = 1.37319053865399486354933
-q51 = -0.25996430133016538255400
-q61 = 0.
-q71 = 0.
+Σ11 = 4.186595370392226897362216859769846226369
+Σ21 = 0.; Σ31 = 0.; Σ41 = 0.; Σ51 = 0.;
 
-q12 = -0.31641585285940445272297
-q22 = -0.53930788973980422327388
-q32 = 0.98517732028644343383297
-q42 = -0.05264665989297578146709
-q52 = -0.113807251750624235013258
-q62 = 0.039879767889849911803103
-q72 = -0.0028794339334846531588787
+Σ22 = 0.6725191921225620731888714836983116420871
+Σ32 = 0.3613418181134949259370502966736306984367
+Σ42 = -0.2021316117293899791481674539631879662707
+Σ52 = 0.03455320708729270824077678274955265350304
 
-q13 = 0.13026916185021164524452
-q23 = -0.87966858995059249256890
-q33 = 0.38609640961100070000134
-q43 = 0.31358369072435588745988
-q53 = 0.085318941913678384633511
-q63 = -0.039046615792734640274641
-q73 = 0.0034470016440805155042908
+Σ33 = 0.7206133711630147057720442098623847362950
+Σ43 = 0.1376472340546569368321616389764958792591
+Σ53 = -0.04136405531324488624637892257286207044784
 
-q14 = -0.01724512193824647912172
-q24 = 0.16272288227127504381134
-q34 = -0.81349810248648813029217
-q44 = 0.13833269266479833215645
-q54 = 0.59743854328548053399616
-q64 = -0.066026434346299887619324
-q74 = -0.0017244594505194129307249
+Σ44 = 0.9578653607931026822074133441449909689509
+Σ54 = 0.02069353627247161734563597102894256809696
 
-q15 = -0.00883569468552192965061
-q25 = 0.03056074759203203857284
-q35 = 0.05021168274530854232278
-q45 = -0.66307364652444929534068
-q55 = 0.014878787464005191116088
-q65 = 0.65882706381707471953820
-q75 = -0.082568940408449266558615
+Σ55 = 0.9908272703370861473007798925906968380654
 
-q1 = [q11,q21,q31,q41,q51,q61,q71]
-q2 = [q12,q22,q32,q42,q52,q62,q72]
-q3 = [q13,q23,q33,q43,q53,q63,q73]
-q4 = [q14,q24,q34,q44,q54,q64,q74]
-q5 = [q15,q25,q35,q45,q55,q65,q75]
+Σil = [ Σ11 Σ21 Σ31 Σ41 Σ51;
+        Σ21 Σ22 Σ32 Σ42 Σ52;
+        Σ31 Σ32 Σ33 Σ43 Σ53;
+        Σ41 Σ42 Σ43 Σ44 Σ54;
+        Σ51 Σ52 Σ53 Σ54 Σ55 ]
 
-@inline function deriv!(df::Vector{T}, f::Vector{T}, n::Int64, dx::T) where T
+Σir = Σil[end:-1:1,end:-1:1];
+
+q11 = -2.0932976346634987158873300;   q21 =  4.0398572053206615302160000;
+q31 = -3.0597858079809922953240000;   q41 =  1.3731905386539948635493300;
+q51 = -0.2599643013301653825540000;   q61 =  0.; q71 = 0.;
+
+q12 = -0.3164158528594044527229700;   q22 = -0.5393078897398042232738800;
+q32 =  0.9851773202864434338329700;   q42 = -0.0526466598929757814670900;
+q52 = -0.1138072517506242350132580;   q62 =  0.0398797678898499118031030;
+q72 = -0.0028794339334846531588787;
+
+q13 =  0.1302691618502116452445200;   q23 = -0.8796685899505924925689000;
+q33 =  0.3860964096110007000013400;   q43 =  0.3135836907243558874598800;
+q53 =  0.0853189419136783846335110;   q63 = -0.0390466157927346402746410;
+q73 =  0.0034470016440805155042908;
+
+q14 = -0.0172451219382464791217200;   q24 =  0.1627228822712750438113400;
+q34 = -0.8134981024864881302921700;   q44 =  0.1383326926647983321564500;
+q54 =  0.5974385432854805339961600;   q64 = -0.0660264343462998876193240;
+q74 = -0.0017244594505194129307249;
+
+q15 = -0.0088356946855219296506100;   q25 =  0.0305607475920320385728400;
+q35 =  0.0502116827453085423227800;   q45 = -0.6630736465244492953406800;
+q55 =  0.0148787874640051911160880;   q65 =  0.6588270638170747195382000;
+q75 = -0.0825689404084492665586150;
+
+ql =  [ q11 q21 q31 q41 q51 q61 q71;
+        q12 q22 q32 q42 q52 q62 q72;
+        q13 q23 q33 q43 q53 q63 q73;
+        q14 q24 q34 q44 q54 q64 q74;
+        q15 q25 q35 q45 q55 q65 q75 ]
+
+qr = -ql[end:-1:1,end:-1:1];
+
+@inline function deriv!(df::Vector{T}, f::Vector{T}, n::Int64, dr̃::T) where T
 
     #######################################################
     # Calculates derivatives using a 4th order SBP operator
     #######################################################
 
-    # @inbounds @fastmath @simd
-
-    df[1] = (q1 ⋅ f[1:7])/dx
-
-    df[2] = (q2 ⋅ f[1:7])/dx
-
-    df[3] = (q3 ⋅ f[1:7])/dx
-
-    df[4] = (q4 ⋅ f[1:7])/dx
-
-    df[5] = (q5 ⋅ f[1:7])/dx
+    df[1:5] .= ql*f[1:7]/dr̃
 
     for i in 6:(n - 5)
-        df[i] = (f[i-2] - 8*f[i-1] + 8*f[i+1] - f[i+2])/(12*dx)
+        df[i] = (f[i-2] - 8*f[i-1] + 8*f[i+1] - f[i+2])/(12*dr̃)
     end
 
-    df[n-4] = -(q5 ⋅ f[n:-1:n-6])/dx
-
-    df[n-3] = -(q4 ⋅ f[n:-1:n-6])/dx
-
-    df[n-2] = -(q3 ⋅ f[n:-1:n-6])/dx
-
-    df[n-1] = -(q2 ⋅ f[n:-1:n-6])/dx
-
-    df[n]   = -(q1 ⋅ f[n:-1:n-6])/dx
+    df[n-4:n] .= qr*f[n-6:n]/dr̃
 
 end
 
-
 @inline function deriv2!(df::Vector{T}, f::Vector{T}, n::Int64, dx::T) where T
 
-    # @inbounds @fastmath @simd
+    #@inbounds
 
     df[1] = (2*f[1] - 5*f[2] + 4*f[3] - f[4])/(dx^2)
 
@@ -366,36 +368,24 @@ end
 
 end
 
-@inline function dissipation!(df::Vector{T}, f::Vector{T}, n::Int64) where T
+@inline function dissipation!(df::Vector{T}, f::Vector{T}, param::Param) where T
 
     ############################################
     # Calculates the numerical dissipation terms
     ############################################
 
-    # @simd @inbounds @fastmath
+    B2 = param.B2; D2 = param.D2; Σi = param.Σi; n = param.grid.ncells;
 
-    df[1] = (-48*f[1] + 96*f[2] - 48*f[3])/(17)
+    # df[1:7] .= Σil*(D2l')*B2l(dr̃)*D2l*f[1:7]
+    #
+    # for i in 7:(n-5)
+    #     df[i] = -(-f[i-2] + 4*f[i-1] - 6*f[i] + 4*f[i+1] - f[i+2])
+    # end
+    #
+    # df[n-6:n] .= Σir*(D2r')*B2r(dr̃)*D2r*f[n-6:n]
 
-    df[2] = (96*f[1] - 240*f[2] + 192*f[3] - 48*f[4])/(59)
-
-    df[3] = (-48*f[1] + 192*f[2] - 288*f[3] + 192*f[4] - 48*f[5])/(43)
-
-    df[4] = (-48f[2] + 192*f[3] - 288*f[4] + 192*f[5] - 48*f[6])/(49)
-
-    for i in 5:(n - 4)
-        df[i] = (-f[i-2] + 4*f[i-1] - 6*f[i] + 4*f[i+1] - f[i+2])
-    end
-
-    df[n-3] = (-48f[n-1] + 192*f[n-2] - 288*f[n-3] + 192*f[n-4] - 48*f[n-5])/(49)
-
-    df[n-2] = (-48*f[n] + 192*f[n-1] - 288*f[n-2] + 192*f[n-3] - 48*f[n-4])/(43)
-
-    df[n-1] = (96*f[n] - 240*f[n-1] + 192*f[n-2] - 48*f[n-3])/(59)
-
-    df[n] = (-48*f[n] + 96*f[n-1] - 48*f[n-2])/(17)
-
-    # df[1] = 0.
-    # df[n] = 0.
+    df .= Σi*(D2')*B2*D2*f
+    #df[n] = 0.
 
 end
 
@@ -467,7 +457,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     ∂rγrr,∂rγθθ,∂rKrr,∂rKθθ,∂rfrrr,∂rfrθθ,∂r𝜙,∂rψ,∂rΠ = drstate.x
     ∂tγrr,∂tγθθ,∂tKrr,∂tKθθ,∂tfrrr,∂tfrθθ,∂t𝜙,∂tψ,∂tΠ = dtstate.x
     ∂4γrr,∂4γθθ,∂4Krr,∂4Kθθ,∂4frrr,∂4frθθ,∂4𝜙,∂4ψ,∂4Π = dissipation.x
-    ᾶ,βr,∂rᾶ,∂rβr,∂r2ᾶ,∂r2βr,α,∂r4βr,∂r5βr = gauge.x
+    ᾶ,βr,∂rᾶ,∂rβr,∂r2ᾶ,∂r2βr,α,∂rlnᾶ,∂r2lnᾶ = gauge.x
 
     γrri,γθθi,Krri,Kθθi,frrri,frθθi,𝜙i,ψi,Πi = init_state.x
     ∂rγrri,∂rγθθi,∂rKrri,∂rKθθi,∂rfrrri,∂rfrθθi,∂r𝜙i,∂rψi,∂rΠi = init_drstate.x
@@ -485,33 +475,8 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # Calculate numerical dissipation
 
     for i in 1:numvar
-        dissipation!(dissipation.x[i],state.x[i],n)
+        dissipation!(dissipation.x[i],state.x[i],param)
     end
-
-    # Calculate the boundary derivatives (third order)
-
-    # ∂rγrrb  = -(-11*γrr[1]  + 18*γrr[2]  - 9*γrr[3]  + 2*γrr[4] )/(6*dr̃)/drdr̃[1]
-    # ∂rγθθb  = -(-11*γθθ[1]  + 18*γθθ[2]  - 9*γθθ[3]  + 2*γθθ[4] )/(6*dr̃)/drdr̃[1]
-    # ∂rKθθb  = -(-11*Kθθ[1]  + 18*Kθθ[2]  - 9*Kθθ[3]  + 2*Kθθ[4] )/(6*dr̃)/drdr̃[1]
-    # ∂rfrθθb = -(-11*frθθ[1] + 18*frθθ[2] - 9*frθθ[3] + 2*frθθ[4])/(6*dr̃)/drdr̃[1]
-
-    # ∂rγrrb  = (-48*γrr[1]  + 59*γrr[2]  - 8*γrr[3]  - 3*γrr[4] )/(34*dr̃)/drdr̃[1]
-    # ∂rγθθb  = (-48*γθθ[1]  + 59*γθθ[2]  - 8*γθθ[3]  - 3*γθθ[4] )/(34*dr̃)/drdr̃[1]
-    # ∂rKθθb  = (-48*Kθθ[1]  + 59*Kθθ[2]  - 8*Kθθ[3]  - 3*Kθθ[4] )/(34*dr̃)/drdr̃[1]
-    # ∂rfrθθb = (-48*frθθ[1] + 59*frθθ[2] - 8*frθθ[3] - 3*frθθ[4])/(34*dr̃)/drdr̃[1]
-    #
-    # γθθb = γθθ[1]*γθθi[1]; γrrb = γrr[1]*γrri[1];
-    # Kθθb = Kθθ[1]*Kθθi[1]; frθθb = frθθ[1]*frθθi[1];
-    # ∂rγrrb = ∂rγrrb*γrri[1] + γrrb*∂rγrri[1]
-    # ∂rγθθb = ∂rγθθb*γθθi[1] + γθθb*∂rγθθi[1]
-    # ∂rKθθb = ∂rKθθb*Kθθi[1] + Kθθb*∂rKθθi[1]
-    # ∂rfrθθb = ∂rfrθθb*frθθi[1] + frθθb*∂rfrθθi[1]
-    #
-    # Umθ = Kθθb - frθθb/sqrt(γrrb)
-    #
-    # ∂rUmθ = ∂rKθθb - ∂rfrθθb/sqrt(γrrb) + frθθb*∂rγrrb/(2*sqrt(γrrb)^3)
-    #
-    # ∂rUpθ = ((sqrt(γθθb)-2)*γθθb*∂rUmθ - Umθ*(sqrt(γθθb)-1)*∂rγθθb)/(sqrt(γθθb)*Umθ^2)
 
     # Convert between the computational r̃ coordinate
     # and the traditional r coordinate
@@ -530,69 +495,23 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         @. drstate.x[i] = ∂reg*init_state.x[i] + reg*init_drstate.x[i]
     end
 
-    # Apply constraint based boundary conditions to the inner boundary
+    # Calculated lapse and derivatives of densitized lapse
 
-    # ∂rKθθdis = ∂rKθθ[1]; ∂rfrθθdis = ∂rfrθθ[1];
-
-    # ∂rKθθcon = frθθ[1]*Kθθ[1]/γθθ[1] + frθθ[1]*Krr[1]/γrr[1]
-    #
-    # ∂rfrθθcon = (frrr[1]*frθθ[1]/γrr[1] + γrr[1]*Kθθ[1]^2/(2*γθθ[1])
-    #   + γrr[1]/2 + Krr[1]*Kθθ[1] - 7*frθθ[1]^2/(2*γθθ[1]))
-
-    # ∂rKθθ[1] = (∂rKθθdis + (∂rfrθθdis/(γθθ[1]*γrr[1])
-    #  + 7*frθθ[1]^2/(2*γrr[1]*γθθ[1]^2) - frrr[1]*frθθ[1]/(γrr[1]^2*γθθ[1])
-    #  - Kθθ[1]^2/(2*γθθ[1]^2) - 1/(2*γθθ[1])
-    #  - Krr[1]*Kθθ[1]/(γrr[1]*γθθ[1]))/(sqrt(γrr[1])*γθθ[1]))
-
-    #∂rfrθθ[1] = (∂rfrθθdis + ∂rfrθθcon + (∂rKθθcon - ∂rKθθdis)*sqrt(γrr[1]))/2
-
-    # ∂rγrr[1] = 2*frrr[1] - 8*γrr[1]*frθθ[1]/γθθ[1]
-    # ∂rγθθ[1] = 2*frθθ[1]
-    #
-
-
-    # Apply constraint based boundary conditions to the outer boundary
-
-    # ∂rKθθdis = ∂rKθθ[n]; ∂rfrθθdis = ∂rfrθθ[n];
-    #
-    # ∂rγrr[n] = 2*frrr[n] - 8*γrr[n]*frθθ[n]/γθθ[n]
-    # ∂rγθθ[n] = 2*frθθ[n]
-    #
-    # ∂rKθθcon = frθθ[n]*Kθθ[n]/γθθ[n] + frθθ[n]*Krr[n]/γrr[n]
-    #
-    # ∂rfrθθcon = (frrr[n]*frθθ[n]/γrr[n] + γrr[n]*Kθθ[n]^2/(2*γθθ[n])
-    #   + γrr[n]/2 + Krr[n]*Kθθ[n] - 7*frθθ[n]^2/(2*γθθ[n]))
-    #
-    # ∂rKθθ[n] = (∂rKθθdis + ∂rKθθcon - (∂rfrθθcon - ∂rfrθθdis)/sqrt(γrr[n]))/2
-    #
-    # ∂rfrθθ[n] = (∂rfrθθdis + ∂rfrθθcon - (∂rKθθcon - ∂rKθθdis)*sqrt(γrr[n]))/2
-
-    # ∂rγrr[n] = 2*frrr[n] - 8*γrr[n]*frθθ[n]/γθθ[n]
-    # ∂rγθθ[n] = 2*frθθ[n]
-    #
-    # ∂rKθθ[n] = frθθ[n]*Kθθ[n]/γθθ[n] + frθθ[n]*Krr[n]/γrr[n]
-    #
-    # ∂rfrθθ[n] = (frrr[n]*frθθ[n]/γrr[n] + γrr[n]*Kθθ[n]^2/(2*γθθ[n])
-    #   + γrr[n]/2 + Krr[n]*Kθθ[n] - 7*frθθ[n]^2/(2*γθθ[n]))
+    @. α = ᾶ*γθθ*sqrt(γrr)
+    @. ∂rlnᾶ = ∂rᾶ/ᾶ
+    @. ∂r2lnᾶ = (∂r2ᾶ*ᾶ - ∂rᾶ^2)/ᾶ^2
 
     # Gauge Conditions
 
     # Keep radius areal
 
-    #@. βr = ᾶ*γθθ*sqrt(γrr)*Kθθ/frθθ
-    #@. βr = frθθ/γθθ/(frθθ + Kθθ*sqrt(γrr))
+    @. βr = ᾶ*γθθ*sqrt(γrr)*Kθθ/frθθ
 
-    # Ingoing coorindate speed of light is exactly -1
-
-    #@. ᾶ = Kθθ*sqrt(γrr)/(frθθ + Kθθ*sqrt(γrr))
-
-    # Calculated lapse and derivatives of densitized lapse
-
-    ∂rlnᾶ = temp.x[3]; ∂r2lnᾶ = temp.x[4];
-
-    @. α = ᾶ*γθθ*sqrt(γrr)
-    @. ∂rlnᾶ = ∂rᾶ/ᾶ
-    @. ∂r2lnᾶ = (∂r2ᾶ*ᾶ - ∂rᾶ^2)/ᾶ^2
+    @. ∂rβr = (∂rᾶ*γθθ*sqrt(γrr)*Kθθ/frθθ + ᾶ*∂rγθθ*sqrt(γrr)*Kθθ/frθθ
+     + ᾶ*γθθ*sqrt(γrr)*∂rKθθ/frθθ + ᾶ*γθθ*∂rγrr*Kθθ/sqrt(γrr)/frθθ/2
+     - ᾶ*γθθ*sqrt(γrr)*Kθθ*∂rfrθθ/frθθ^2)
+    #deriv!(∂rβr,βr,n,dr̃)
+    deriv!(∂r2βr,∂rβr,n,dr̃)
 
     #########################################################
     # Evolution Equations
@@ -690,7 +609,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     Umr = Krr[1] - frrr[1]/sqrt(γrr[1])
     #Upθ = Kθθ[1] + frθθ[1]/sqrt(γrr[1])
 
-    ∂rUmθ = ∂rKθθ[1] - ∂rfrθθ[1]/sqrt(γrr[1]) + frθθ[1]*∂rγrr[1]/(2*sqrt(γrr[1])^3)
+    #∂rUmθ = ∂rKθθ[1] - ∂rfrθθ[1]/sqrt(γrr[1]) + frθθ[1]*∂rγrr[1]/(2*sqrt(γrr[1])^3)
     #
     # ∂rUpθ = (1/sqrt(γθθ[1]) - 1)*∂rγθθ[1]/Umθ[1] - (2*sqrt(γθθ[1]) - γθθ[1])*∂rUmθ/Umθ[1]^2
 
@@ -699,6 +618,8 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     ∂rcp = -∂rβr[1] + ∂rᾶ[1]*γθθ[1] + ᾶ[1]*∂rγθθ[1]
     ∂rcm = -∂rβr[1] - ∂rᾶ[1]*γθθ[1] - ᾶ[1]*∂rγθθ[1]
+
+    ∂rUmθ = ∂rKθθ[1] - ∂rfrθθ[1]/sqrt(γrr[1]) + frθθ[1]*∂rγrr[1]/(2*sqrt(γrr[1])^3)
 
     ∂rUpθ = cm*∂rUmθ/cp + ∂rcm*Umθ[1]/cp - cm*Umθ[1]*∂rcp/cp^2
 
@@ -714,7 +635,27 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     ∂tKrr[1]  += s*( (Upr - Krr[1])/2 - frrr[1]/sqrt(γrr[1])/2 )/(dr̃*σ00)
     ∂tfrrr[1] += s*( (Upr - Krr[1])*sqrt(γrr[1])/2 - frrr[1]/2 )/(dr̃*σ00)
 
-    ∂rUmθ = ∂rKθθ[n] - ∂rfrθθ[n]/sqrt(γrr[n]) + frθθ[n]*∂rγrr[n]/(2*sqrt(γrr[n])^3)
+
+    # Outer boundary
+
+
+    @. Upθ = Kθθ + frθθ/sqrt(γrr)
+
+    @. Umθ = ((-βr + α/sqrt(γrr))/(-βr - α/sqrt(γrr)))*Upθ
+    #@. Umθ = Kθθ - frθθ/sqrt(γrr)
+
+    cp = -βr[n] + α[n]/sqrt(γrr[n])
+    cm = -βr[n] - α[n]/sqrt(γrr[n])
+
+    ∂rcp = -∂rβr[n] + ∂rᾶ[n]*γθθ[n] + ᾶ[n]*∂rγθθ[n]
+    ∂rcm = -∂rβr[n] - ∂rᾶ[n]*γθθ[n] - ᾶ[n]*∂rγθθ[n]
+
+    ∂rUpθ = ∂rKθθ[n] + ∂rfrθθ[n]/sqrt(γrr[n]) - frθθ[n]*∂rγrr[n]/(2*sqrt(γrr[n])^3)
+    #∂rUmθ = ∂rKθθ[n] - ∂rfrθθ[n]/sqrt(γrr[n]) + frθθ[n]*∂rγrr[n]/(2*sqrt(γrr[n])^3)
+
+    ∂rUmθ = cp*∂rUpθ/cm + ∂rcp*Upθ[n]/cm - cp*Upθ[n]*∂rcm/cm^2
+
+    #∂rUmθ = ∂rKθθ[n] - ∂rfrθθ[n]/sqrt(γrr[n]) + frθθ[n]*∂rγrr[n]/(2*sqrt(γrr[n])^3)
 
     Upr = Krr[n] + frrr[n]/sqrt(γrr[n])
 
@@ -731,16 +672,20 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     #Umr = Krri[n] - frrri[n]/sqrt(γrri[n])
 
     ∂tKθθ[n]  += s*(  (Umθ[n] - Kθθ[n])/2 + frθθ[n]/sqrt(γrr[n])/2 )/(dr̃*σ00)
-    ∂tfrθθ[n] += s*( -(Umθ[n] - Kθθ[n])*sqrt(γrr[n])/2 + frθθ[n]*U0r/γrr[n]/2 - frθθ[n] )/(dr̃*σ00)
+    ∂tfrθθ[n] += s*( -(Umθ[n] - Kθθ[n])*sqrt(γrr[n])/2 - frθθ[n]/2 )/(dr̃*σ00)
+    #+ frθθ[n]*U0r/γrr[n]/2
+
 
     # ∂tγrr[n]  += s*( U0r - γrr[n] )/(dr̃*σ00)
     # ∂tγθθ[n]  += s*( U0θ - γθθ[n] )/(dr̃*σ00)
 
     ∂tγrr[n] = (2*frrr[n] - 8*frθθ[n]*γrr[n]/γθθ[n])*βr[n] + 2*∂rβr[n]*γrr[n] - 2*α[n]*Krr[n]
-    ∂tγθθ[n] = 2*frθθ[n]*βr[n] - 2*α[n]*Kθθ[n]
+    ∂tγθθ[n] = 0.
+    #∂tγθθ[n] = 2*frθθ[n]*βr[n] - 2*α[n]*Kθθ[n]
 
     ∂tKrr[n]  += s*(  (Umr - Krr[n])/2 + frrr[n]/sqrt(γrr[n])/2 )/(dr̃*σ00)
-    ∂tfrrr[n] += s*( -(Umr - Krr[n])*sqrt(γrr[n])/2 + frrr[n]*U0r/γrr[n]/2 - frrr[n] )/(dr̃*σ00)
+    ∂tfrrr[n] += s*( -(Umr - Krr[n])*sqrt(γrr[n])/2 - frrr[n]/2 )/(dr̃*σ00)
+    #+ frrr[n]*U0r/γrr[n]/2
 
     # ∂tγrr[n] = 0.
     # ∂tγθθ[n] = 0.
@@ -781,9 +726,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     # Add the numerical dissipation to the regularized state
 
-    σ = 0.
+    σ = 1.
     for i in 1:numvar
-        @. dtstate.x[i] += σ*dissipation.x[i]/16.
+        @. dtstate.x[i] -= σ*dissipation.x[i]/16.
     end
 
     # for i in 1:numvar-3
@@ -891,8 +836,13 @@ function constraints(regstate::VarContainer{T},param) where T
 
     #@. Er = norm*sqrt(γrr)*γθθ*(α*ρ - βr*Sr)*drdr̃
 
-    @. Er = (norm*sqrt(γrr)*γθθ*
+    Σ = sparse(Diagonal(fill(1.,n)))
+    Σ[1:5,1:5] .= inv(Σil); Σ[n-4:n,n-4:n] .= inv(Σir);
+
+    @. Er = (sqrt(γrr)*γθθ*
         (2*Krr^2 + 2*Kθθ^2 + 2*frrr^2/γrr + 2*frθθ^2/γrr + γrr^2 + γθθ^2)*drdr̃)
+
+    Er .= Σ*Er
 
     E = 0
     for i in 1:n
@@ -1115,10 +1065,10 @@ function main(points,folder)
         dr̃ = spacing(grid)
         dt = dr̃/4.
 
-        tspan = T[0., 10.]
+        tspan = T[0., 6.]
         tmin, tmax = tspan
 
-        printtimes = 0.05
+        printtimes = 0.1
 
         v = 1.
 
@@ -1165,13 +1115,25 @@ function main(points,folder)
         sample!(drdr̃samp, grid, r̃ -> drdr̃(r̃) )
         sample!(d2rdr̃samp, grid, r̃ -> d2rdr̃(r̃) )
 
+        Bvec = ones(T,n)
+        Bvec[1:5] .= [5*dr̃,(1+4*dr̃),(2+3*dr̃),(3+2*dr̃),(4+dr̃)]/5.
+        Bvec[n:-1:n-4] .= Bvec[1:5]
+        B2 = sparse(Diagonal(Bvec))
+
+        D2 = sparse(Tridiagonal(fill(1.,n-1),fill(-2.,n),fill(1.,n-1)))
+        D2[1,1:3] .= D2[2,1:3]; D2[n,n-2:n] .= D2[n-1,n-2:n];
+
+        Σi = sparse(Diagonal(fill(1.,n)))
+        Σi[1:5,1:5] .= Σil; Σi[n-4:n,n-4:n] .= Σir;
+
         param = Param(
         r̃min,r̃max,dr̃,Mtot,grid,reg_list,
         r,drdr̃,d2rdr̃,
         rsamp,drdr̃samp,d2rdr̃samp,gauge,
         init_state,init_drstate,
         state,drstate,
-        dtstate,dissipation,temp)
+        dtstate,dissipation,temp,
+        B2,D2,Σi)
 
         init!(regstate, param)
 
