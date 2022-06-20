@@ -221,10 +221,10 @@ function init!(state::VarContainer{T}, param) where T
 
     r0 = 9.
     σr = 0.1
-    Amp = 0.02
+    Amp = 0.1
 
     Fᾶ(M,r,r̃) = 1/(r(r̃)^2+2*(M)*r(r̃))
-    Fβr(M,r,r̃) = 2*(M)/(2*(M)+r(r̃))
+    Fβr(M,r,r̃) = 2*(M)/(2*M+r(r̃))
     Fγrr(M,r,r̃) = 1 + 2*M/r(r̃)
     Fγθθ(M,r,r̃) = r(r̃)^2
 
@@ -250,23 +250,35 @@ function init!(state::VarContainer{T}, param) where T
     ∂rM(r̃) = 4*pi*r(r̃)^2*fρ(M(r̃),r,r̃)
     # M(r̃) = 1.
     # ∂rM(r̃) = 0.
+    M0(r̃) = 1.
+    ∂rM0(r̃) = 0.
 
-    sample!(γrri,   grid, r̃ -> fγrr(M,r,r̃)      )
-    sample!(γθθi,   grid, r̃ -> fγθθ(M,r,r̃)      )
-    sample!(Krri,   grid, r̃ -> fKrr(M,∂rM,r,r̃)  )
-    sample!(Kθθi,   grid, r̃ -> fKθθ(M,r,r̃)      )
-    sample!(frrri,  grid, r̃ -> ffrrr(M,∂rM,r,r̃) )
-    sample!(frθθi,  grid, r̃ -> ffrθθ(M,r,r̃)     )
-    sample!(𝜙i,     grid, r̃ -> f𝜙(M,r,r̃)        )
-    sample!(ψi,     grid, r̃ -> fψ(M,r,r̃)        )
-    sample!(Πi,     grid, r̃ -> fΠ(M(r̃),r,r̃)     )
+    sample!(γrri,   grid, r̃ -> fγrr(M0,r,r̃)      )
+    sample!(γθθi,   grid, r̃ -> fγθθ(M0,r,r̃)      )
+    sample!(Krri,   grid, r̃ -> fKrr(M0,∂rM0,r,r̃)  )
+    sample!(Kθθi,   grid, r̃ -> fKθθ(M0,r,r̃)      )
+    sample!(frrri,  grid, r̃ -> ffrrr(M0,∂rM0,r,r̃) )
+    sample!(frθθi,  grid, r̃ -> ffrθθ(M0,r,r̃)     )
+    sample!(𝜙i,     grid, r̃ -> f𝜙(M0,r,r̃)        )
+    sample!(ψi,     grid, r̃ -> fψ(M0,r,r̃)        )
+    sample!(Πi,     grid, r̃ -> fΠ(M0(r̃),r,r̃)      )
 
-    sample!(∂rγrr,  grid, r̃ -> f∂r̃γrr(M,r,r̃)/drdr̃(r̃)      )
-    sample!(∂rγθθ,  grid, r̃ -> f∂r̃γθθ(M,r,r̃)/drdr̃(r̃)      )
-    sample!(∂rKrr,  grid, r̃ -> f∂r̃Krr(M,∂rM,r,r̃)/drdr̃(r̃)  )
-    sample!(∂rKθθ,  grid, r̃ -> f∂r̃Kθθ(M,r,r̃)/drdr̃(r̃)      )
-    sample!(∂rfrrr, grid, r̃ -> f∂r̃frrr(M,∂rM,r,r̃)/drdr̃(r̃) )
-    sample!(∂rfrθθ, grid, r̃ -> f∂r̃frθθ(M,r,r̃)/drdr̃(r̃)     )
+    sample!(γrr,   grid, r̃ -> fγrr(M,r,r̃)      )
+    sample!(γθθ,   grid, r̃ -> fγθθ(M,r,r̃)      )
+    sample!(Krr,   grid, r̃ -> fKrr(M,∂rM,r,r̃)  )
+    sample!(Kθθ,   grid, r̃ -> fKθθ(M,r,r̃)      )
+    sample!(frrr,  grid, r̃ -> ffrrr(M,∂rM,r,r̃) )
+    sample!(frθθ,  grid, r̃ -> ffrθθ(M,r,r̃)     )
+    sample!(𝜙,     grid, r̃ -> f𝜙(M,r,r̃)        )
+    sample!(ψ,     grid, r̃ -> fψ(M,r,r̃)        )
+    sample!(Π,     grid, r̃ -> fΠ(M(r̃),r,r̃)     )
+
+    sample!(∂rγrr,  grid, r̃ -> f∂r̃γrr(M0,r,r̃)/drdr̃(r̃)      )
+    sample!(∂rγθθ,  grid, r̃ -> f∂r̃γθθ(M0,r,r̃)/drdr̃(r̃)      )
+    sample!(∂rKrr,  grid, r̃ -> f∂r̃Krr(M0,∂rM0,r,r̃)/drdr̃(r̃)  )
+    sample!(∂rKθθ,  grid, r̃ -> f∂r̃Kθθ(M0,r,r̃)/drdr̃(r̃)      )
+    sample!(∂rfrrr, grid, r̃ -> f∂r̃frrr(M0,∂rM0,r,r̃)/drdr̃(r̃) )
+    sample!(∂rfrθθ, grid, r̃ -> f∂r̃frθθ(M0,r,r̃)/drdr̃(r̃)     )
 
     Mg(rt) = M(rt)
 
@@ -284,16 +296,17 @@ function init!(state::VarContainer{T}, param) where T
     for i in 1:numvar
         if i in reg_list
             for j in 1:n
-               state.x[i][j] = 1. + s*rand(Uniform(-1,1))
+               state.x[i][j] /= init_state.x[i][j]
+               state.x[i][j] += s*rand(Uniform(-1,1))
             end
-            state.x[i][1:10] .= 1.
-            state.x[i][n-9:n] .= 1.
+            # state.x[i][1:10] .= 1.
+            # state.x[i][n-9:n] .= 1.
         else
             for j in 1:n
-               state.x[i][j] = init_state.x[i][j] + s*rand(Uniform(-1,1))
+               state.x[i][j] += s*rand(Uniform(-1,1))
             end
-            state.x[i][1:10] .= init_state.x[i][1:10]
-            state.x[i][n-9:n] .= init_state.x[i][n-9:n]
+            # state.x[i][1:10] .= init_state.x[i][1:10]
+            # state.x[i][n-9:n] .= init_state.x[i][n-9:n]
         end
     end
 
@@ -565,7 +578,17 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     for i in reg_list
         @. reg = state.x[i]; @. ∂reg = drstate.x[i];
         @. state.x[i] *= init_state.x[i]
-        @. drstate.x[i] = ∂reg*init_state.x[i] + reg*init_drstate.x[i]
+        for j in 1:n
+            if j in [1,2,n-1,n]
+                drstate.x[i][j] = (init_state.x[i][j]*∂reg[j]
+                 + init_drstate.x[i][j]*reg[j] )
+            else
+                drstate.x[i][j] = (init_state.x[i][j]*∂reg[j]
+                 + init_drstate.x[i][j]*
+                 (-2*reg[j-2]+8*reg[j-1]+8*reg[j+1]-2*reg[j+2])/12 )
+            end
+
+        end
     end
 
 
@@ -850,8 +873,19 @@ function constraints(regstate::VarContainer{T},param) where T
     for i in reg_list
         @. reg = state.x[i]; @. ∂reg = drstate.x[i];
         @. state.x[i] *= init_state.x[i]
-        @. drstate.x[i] = ∂reg*init_state.x[i] + reg*init_drstate.x[i]
+        for j in 1:n
+            if j in [1,2,n-1,n]
+                drstate.x[i][j] = (init_state.x[i][j]*∂reg[j]
+                 + init_drstate.x[i][j]*reg[j] )
+            else
+                drstate.x[i][j] = (init_state.x[i][j]*∂reg[j]
+                 + init_drstate.x[i][j]*
+                 (-2*reg[j-2]+8*reg[j-1]+8*reg[j+1]-2*reg[j+2])/12 )
+            end
+
+        end
     end
+
 
     α = temp.x[3]; ρ = temp.x[4]; Sr = temp.x[5]
 
@@ -1100,10 +1134,11 @@ function main(points,folder)
         dr̃ = spacing(grid)
         dt = dr̃/4.
 
-        tspan = T[0., 6.]
+        tspan = T[0., 30.]
         tmin, tmax = tspan
 
-        printtimes = 0.05
+        printtimes = 1.
+        savetimes = 0.1
 
         v = 1.
 
@@ -1220,7 +1255,7 @@ function main(points,folder)
             abstol = atol,
             dt = dt,
             adaptive = false,
-            saveat = printtimes,
+            saveat = savetimes,
             alias_u0 = true,
             progress = true,
             progress_steps = custom_progress_step,
