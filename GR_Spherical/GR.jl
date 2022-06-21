@@ -106,79 +106,62 @@ end
 
 #Kerr-Schild Coordinates
 
-r0 = 5.
-σr = 0.1
-Amp = 0.0
-
-fᾶ(M,r,r̃) = 1/(r(r̃)^2 + 2*M(r̃)*r(r̃)) + Amp*exp(-(1/2)*((r(r̃)-r0)/σr)^2)
-f∂r̃ᾶ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fᾶ(M,r,r̃), r̃)
-f∂r̃2ᾶ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃ᾶ(M,r,r̃), r̃)
-
-fβr(M,r,r̃) = 2*M(r̃)/(2*M(r̃)+r(r̃))
-f∂r̃βr(M,r,r̃) = ForwardDiff.derivative(r̃ -> fβr(M,r,r̃), r̃)
-f∂r̃2βr(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃βr(M,r,r̃), r̃)
-
-fγrr(M,r,r̃) = 1 + 2*M(r̃)/r(r̃)
-f∂r̃γrr(M,r,r̃) = ForwardDiff.derivative(r̃ -> fγrr(M,r,r̃), r̃)
-f∂r̃2γrr(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃γrr(M,r,r̃), r̃)
-
-fγθθ(M,r,r̃) = r(r̃)^2
-f∂r̃γθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fγθθ(M,r,r̃), r̃)
-f∂r̃2γθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃γθθ(M,r,r̃), r̃)
-
-fKrr(M,∂rM,r,r̃) = (2*(r(r̃)*∂rM(r̃)-M(r̃))/r(r̃)^3)*(r(r̃)+M(r̃))/sqrt((1+2*M(r̃)/r(r̃)))
-f∂r̃Krr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> fKrr(M,∂rM,r,r̃), r̃)
-f∂r̃2Krr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃Krr(M,∂rM,r,r̃), r̃)
-
-fKθθ(M,r,r̃) = 2*M(r̃)/sqrt((1+2*M(r̃)/r(r̃)))
-f∂r̃Kθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fKθθ(M,r,r̃), r̃)
-f∂r̃2Kθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃Kθθ(M,r,r̃), r̃)
-
-ffrrr(M,∂rM,r,r̃) = (7*M(r̃) + (4 + ∂rM(r̃))*r(r̃))/(r(r̃)^2)
-f∂r̃frrr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> ffrrr(M,∂rM,r,r̃), r̃)
-f∂r̃2frrr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃frrr(M,∂rM,r,r̃), r̃)
-
-ffrθθ(M,r,r̃) = r(r̃)
-f∂r̃frθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> ffrθθ(M,r,r̃), r̃)
-f∂r̃2frθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃frθθ(M,r,r̃), r̃)
+# r0 = 5.
+# σr = 0.1
+# Amp = 0.0
+#
+# fᾶ(M,r,r̃) = 1/(r(r̃)^2 + 2*M(r̃)*r(r̃)) + Amp*exp(-(1/2)*((r(r̃)-r0)/σr)^2)
+# fβr(M,r,r̃) = 2*M(r̃)/(2*M(r̃)+r(r̃))
+# fγrr(M,r,r̃) = 1 + 2*M(r̃)/r(r̃)
+# fγθθ(M,r,r̃) = r(r̃)^2
+# fKrr(M,∂rM,r,r̃) = (2*(r(r̃)*∂rM(r̃)-M(r̃))/r(r̃)^3)*(r(r̃)+M(r̃))/sqrt((1+2*M(r̃)/r(r̃)))
+# fKθθ(M,r,r̃) = 2*M(r̃)/sqrt((1+2*M(r̃)/r(r̃)))
+# ffrrr(M,∂rM,r,r̃) = (7*M(r̃) + (4 + ∂rM(r̃))*r(r̃))/(r(r̃)^2)
+# ffrθθ(M,r,r̃) = r(r̃)
 
 # Schwarzschild
 #
 # r0 = 5.
 # σr = 0.1
 # Amp = 0.00001
-#
 # fᾶ(M,r,r̃) = sqrt(1. - 2*M(r̃)/r(r̃)) + Amp*exp(-(1/2)*((r(r̃)-r0)/σr)^2)
-# f∂r̃ᾶ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fᾶ(M,r,r̃), r̃)
-# f∂r̃2ᾶ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃ᾶ(M,r,r̃), r̃)
-#
 # fβr(M,r,r̃) = 0.
-# f∂r̃βr(M,r,r̃) = ForwardDiff.derivative(r̃ -> fβr(M,r,r̃), r̃)
-# f∂r̃2βr(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃βr(M,r,r̃), r̃)
-#
 # fγrr(M,r,r̃) = 1/(1 - 2*M(r̃)/r(r̃))
-# f∂r̃γrr(M,r,r̃) = ForwardDiff.derivative(r̃ -> fγrr(M,r,r̃), r̃)
-# f∂r̃2γrr(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃γrr(M,r,r̃), r̃)
-#
 # fγθθ(M,r,r̃) = r(r̃)^2
-# f∂r̃γθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fγθθ(M,r,r̃), r̃)
-# f∂r̃2γθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃γθθ(M,r,r̃), r̃)
-#
 # fKrr(M,∂rM,r,r̃) = 0.
-# f∂r̃Krr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> fKrr(M,∂rM,r,r̃), r̃)
-# f∂r̃2Krr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃Krr(M,∂rM,r,r̃), r̃)
-#
 # fKθθ(M,r,r̃) = 0.
-# f∂r̃Kθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fKθθ(M,r,r̃), r̃)
-# f∂r̃2Kθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃Kθθ(M,r,r̃), r̃)
-#
 # ffrrr(M,∂rM,r,r̃) = (-17*M(r̃) + (8 + ∂rM(r̃))*r(r̃))/(r(r̃)-2*M(r̃))^2
-# f∂r̃frrr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> ffrrr(M,∂rM,r,r̃), r̃)
-# f∂r̃2frrr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃frrr(M,∂rM,r,r̃), r̃)
-#
 # ffrθθ(M,r,r̃) = r(r̃)
-# f∂r̃frθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> ffrθθ(M,r,r̃), r̃)
-# f∂r̃2frθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃frθθ(M,r,r̃), r̃)
+
+# Cartesian Minkowski
+
+fᾶ(M,r,r̃) = 1.
+fβr(M,r,r̃) = 0.
+fγrr(M,r,r̃) = 1.
+fγθθ(M,r,r̃) = 1.
+fKrr(M,∂rM,r,r̃) = 0.
+fKθθ(M,r,r̃) = 0.
+ffrrr(M,∂rM,r,r̃) = 0.
+ffrθθ(M,r,r̃) = 0.
+
+
+f∂r̃ᾶ(M,r,r̃)         = ForwardDiff.derivative(r̃ -> fᾶ(M,r,r̃), r̃)
+f∂r̃2ᾶ(M,r,r̃)        = ForwardDiff.derivative(r̃ -> f∂r̃ᾶ(M,r,r̃), r̃)
+f∂r̃βr(M,r,r̃)        = ForwardDiff.derivative(r̃ -> fβr(M,r,r̃), r̃)
+f∂r̃2βr(M,r,r̃)       = ForwardDiff.derivative(r̃ -> f∂r̃βr(M,r,r̃), r̃)
+f∂r̃γrr(M,r,r̃)       = ForwardDiff.derivative(r̃ -> fγrr(M,r,r̃), r̃)
+f∂r̃2γrr(M,r,r̃)      = ForwardDiff.derivative(r̃ -> f∂r̃γrr(M,r,r̃), r̃)
+f∂r̃γθθ(M,r,r̃)       = ForwardDiff.derivative(r̃ -> fγθθ(M,r,r̃), r̃)
+f∂r̃2γθθ(M,r,r̃)      = ForwardDiff.derivative(r̃ -> f∂r̃γθθ(M,r,r̃), r̃)
+f∂r̃Krr(M,∂rM,r,r̃)   = ForwardDiff.derivative(r̃ -> fKrr(M,∂rM,r,r̃), r̃)
+f∂r̃2Krr(M,∂rM,r,r̃)  = ForwardDiff.derivative(r̃ -> f∂r̃Krr(M,∂rM,r,r̃), r̃)
+f∂r̃Kθθ(M,r,r̃)       = ForwardDiff.derivative(r̃ -> fKθθ(M,r,r̃), r̃)
+f∂r̃2Kθθ(M,r,r̃)      = ForwardDiff.derivative(r̃ -> f∂r̃Kθθ(M,r,r̃), r̃)
+f∂r̃frrr(M,∂rM,r,r̃)  = ForwardDiff.derivative(r̃ -> ffrrr(M,∂rM,r,r̃), r̃)
+f∂r̃2frrr(M,∂rM,r,r̃) = ForwardDiff.derivative(r̃ -> f∂r̃frrr(M,∂rM,r,r̃), r̃)
+f∂r̃frθθ(M,r,r̃)      = ForwardDiff.derivative(r̃ -> ffrθθ(M,r,r̃), r̃)
+f∂r̃2frθθ(M,r,r̃)     = ForwardDiff.derivative(r̃ -> f∂r̃frθθ(M,r,r̃), r̃)
+
 
 function init!(state::VarContainer{T}, param) where T
 
@@ -219,7 +202,7 @@ function init!(state::VarContainer{T}, param) where T
     # fψ(r̃) = Amp*exp(-(1/2)*((r(r̃)-r0)/σr)^2)*(r(r̃)*r0-r(r̃)^2-σr^2)/(r(r̃)^2*σr^2)
     # fΠ(r̃) = 0.
 
-    r0 = 9.
+    r0 = 6.
     σr = 0.1
     Amp = 0.1
 
@@ -230,12 +213,12 @@ function init!(state::VarContainer{T}, param) where T
 
     f𝜙(M,r,r̃) = Amp*(1/r(r̃))*exp(-(1/2)*((r(r̃)-r0)/σr)^2)
     fψ(M,r,r̃) = Amp*exp(-(1/2)*((r(r̃)-r0)/σr)^2)*(r(r̃)*r0-r(r̃)^2-σr^2)/(r(r̃)^2*σr^2)
-    fΠ(M,r,r̃) = Fβr(M,r,r̃)*fψ(M,r,r̃)
+    fΠ(M,r,r̃) = 0*Fβr(M,r,r̃)*fψ(M,r,r̃)
 
     fρ(M,r,r̃) = ((fΠ(M,r,r̃) - Fβr(M,r,r̃)*fψ(M,r,r̃))^2/(Fᾶ(M,r,r̃)^2*Fγθθ(M,r,r̃)^2*Fγrr(M,r,r̃))
         + fψ(M,r,r̃)^2/Fγrr(M,r,r̃) + m^2*f𝜙(M,r,r̃)^2)/2
 
-    f∂r̃M(M,r,r̃) = 4*pi*r(r̃)^2*fρ(M,r,r̃)*drdr̃(r̃)
+    f∂r̃M(M,r,r̃) = 4*pi*r(r̃)^2*fρ(M,r,r̃)*drdr̃(r̃)*0
 
     # Constraint Equations
 
@@ -788,9 +771,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         @. dtstate.x[i] += σ*dissipation.x[i]/16.
     end
 
-    # for i in 1:numvar-3
-    #     @. dtstate.x[i] = 0.
-    # end
+    for i in 1:numvar-3
+        @. dtstate.x[i] = 0.
+    end
 
     # Store the calculated state into the param
     # so that we can print it to the screen
@@ -1107,7 +1090,7 @@ function main(points,folder)
         T = Float64
 
         #r̃span = T[2.,22.] .+ (1.0 - 0.1*i)
-        r̃span = T[7.0,11.0]
+        r̃span = T[3.0,9.0]
         r̃min, r̃max = r̃span
         rspan = T[r̃min,r̃max]
 
@@ -1138,7 +1121,7 @@ function main(points,folder)
         tmin, tmax = tspan
 
         printtimes = 1.
-        savetimes = 0.1
+        savetimes = 0.05
 
         v = 1.
 
@@ -1147,10 +1130,10 @@ function main(points,folder)
         Mtot = 1.
 
         # γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,, = state.x
-        #reg_list = Int64[]
+        reg_list = Int64[]
         #reg_list = [2]
         #reg_list = [4,7,8]
-        reg_list = [1,2,3,4,5,6]
+        #reg_list = [1,2,3,4,5,6]
         #reg_list = [1,2,5,6]
         #reg_list = [10]
 
