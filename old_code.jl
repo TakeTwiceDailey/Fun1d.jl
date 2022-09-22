@@ -1,4 +1,279 @@
 
+
+# Neumann
+# ∂ₜUp𝜙 = @part 1 -∂ₜUm𝜙*cm/cp
+#∂ₜUp𝜙 = 0.
+
+#∂ₜUp𝜙 = 0.
+
+# ∂ₜψ[1]  += s*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/(dr̃*σ00)/2.
+# ∂ₜΠ[1]  += s*(Up𝜙b - Up𝜙)/(dr̃*σ00)/2.
+#∂ₜ𝜙[1]  += s*(0. - 𝜙[1])/(dr̃*σ00)
+
+#∂ₜ𝜙[1] = 0.
+# ∂ₜψ[1] += Πrhs/cp
+# ∂ₜΠ[1] = 0.
+
+# γrrrhs = ∂ₜγrr[1]; γθθrhs = ∂ₜγθθ[1];
+# Krrrhs = ∂ₜKrr[1]; frrrrhs = ∂ₜfrrr[1];
+# Kθθrhs = ∂ₜKθθ[1]; frθθrhs = ∂ₜfrθθ[1];
+# Πrhs = ∂ₜΠ[1]; ψrhs = ∂ₜψ[1];
+
+# @part 1 ∂ₜΠ = ∂ₜUp𝜙/2 + Πrhs/2 - ψrhs/sqrt(γrr)/2 + ψ*γrrrhs/4/sqrt(γrr)^3
+# @part 1 ∂ₜψ = ψrhs/2 + ∂ₜUp𝜙*sqrt(γrr)/2 - Πrhs*sqrt(γrr)/2 + ψ*γrrrhs/4/γrr
+#Define boundary condition
+# Dirichlet condition keeps areal radius constant.
+# Upθ = @part 1 Umθ*cm/cp
+#
+# ∂ₜUmr = @part 1 ∂ₜKrr - ∂ₜfrrr/sqrt(γrr) + frrr*∂ₜγrr/2/sqrt(γrr)^3
+
+#∂ₜUpr = @part 1 ∂ₜUmr*cm/cp + Umr*(2*ᾶ*βʳ*∂ₜγθθ/cp^2)
+
+# ∂ₜUpr = 0
+#
+# #Dirichlet on r-mode
+# #Uprb = @part 1 (cm/cp)*Umr
+#
+# @part 1 ∂ₜKrr = ∂ₜUpr/2 + Krrrhs/2 - frrrrhs/sqrt(γrr)/2 + frrr*γrrrhs/4/sqrt(γrr)^3
+# @part 1 ∂ₜfrrr = frrrrhs/2 + ∂ₜUpr*sqrt(γrr)/2 - Krrrhs*sqrt(γrr)/2 + frrr*γrrrhs/4/γrr
+#
+# # ∂ₜKrr[1]  += s*(Uprb - Upr[1])/(dr̃*Σ11)/2.
+# # ∂ₜfrrr[1] += s*sqrt(γrr[1])*(Uprb - Upr[1])/(dr̃*Σ11)/2.
+#
+# ∂ᵣUpθ = @part 1 ( (Umr + Upr)*Upθ/2/sqrt(γrr) + (1. + Upθ^2/γθθ)*sqrt(γrr)/2
+#     - 4*pi*sqrt(γrr)*γθθ*(ρ + Sr/sqrt(γrr)) )
+#
+# ∂ₜUpθ = @part 1 ( α - cp*∂ᵣUpθ + Umr*Upθ*α/γrr + (Upθ - Umθ)*Upθ*α/γθθ
+#     - α*∂ᵣlnᾶ*Upθ/sqrt(γrr) + 4*pi*α*(γθθ*Tt - 2*Sθθ) )
+#
+# @part 1 ∂ₜKθθ  = ∂ₜUpθ/2 + Kθθrhs/2 - frθθrhs/sqrt(γrr)/2 + frθθ*γrrrhs/4/sqrt(γrr)^3
+# @part 1 ∂ₜfrθθ = frθθrhs/2 + ∂ₜUpθ*sqrt(γrr)/2 - Kθθrhs*sqrt(γrr)/2 + frθθ*γrrrhs/4/γrr
+
+# Gauge Conditions
+# Keep radius areal and keep cp constant
+
+# @. ᾶ  = cp*frθθ/γθθ/(frθθ-Kθθ*sqrt(γrr))
+#
+# @. βʳ = cp*Kθθ*sqrt(γrr)/(frθθ-Kθθ*sqrt(γrr))
+#
+# mul!(∂ᵣᾶ,D,ᾶ)
+# mul!(∂ᵣ2ᾶ,D,∂ᵣᾶ)
+#
+# mul!(∂ᵣβʳ,D,βʳ)
+# mul!(∂ᵣ2βʳ,D,∂ᵣβʳ)
+
+# Keep both ingoing and outgoing coordinate speeds of light fixed
+# @. ᾶ    = (cp-cm)/γθθ/2
+# @. ∂ᵣᾶ  = (∂ᵣcp-∂ᵣcm)/γθθ/2 - 4*frθθ*ᾶ/γθθ/2
+# @. ∂ᵣ2ᾶ = ( (∂ᵣ2cp-∂ᵣ2cm)/γθθ/2 + 7*ᾶ*frθθ^2/γθθ^2 - ᾶ*Kθθ^2*γrr/γθθ^2
+#  - 4*∂ᵣᾶ*frθθ/γθθ - 2*ᾶ*Krr*Kθθ/γθθ - 2*ᾶ*frrr*frθθ/γrr/γθθ - ᾶ*γrr/γθθ
+#  + 8*pi*ᾶ*γrr*ρ )
+#
+# @. βʳ    = -(cp+cm)/2
+# @. ∂ᵣβʳ  = -(∂ᵣcp+∂ᵣcm)/2
+# @. ∂ᵣ2βʳ = -(∂ᵣ2cp+∂ᵣ2cm)/2
+
+# ρ = temp.x[5]
+# @. ρ = ( Π^2 + ψ^2/γrr + (m^2)*𝜙^2)/2
+#
+# @. βʳ    = -cp + ᾶ*γθθ
+# @. ∂ᵣβʳ  = -∂ᵣcp + ∂ᵣᾶ*γθθ + 2*ᾶ*frθθ
+# @. ∂ᵣ2βʳ = ( -∂ᵣ2cp + ∂ᵣ2ᾶ*γθθ + 4*∂ᵣᾶ*frθθ + 2*ᾶ*Krr*Kθθ + 2*ᾶ*frrr*frθθ/γrr
+#     + ᾶ*γrr - 7*ᾶ*frθθ^2/γθθ + ᾶ*Kθθ^2*γrr/γθθ - 8*pi*ᾶ*γrr*γθθ*ρ )
+
+# Gauge condition for preventing apparent horizon formation
+
+# @. βʳ = ᾶ*γθθ*γrr*( 3*frθθ^2 - 2*frθθ*Kθθ*sqrt(γrr) - γrr*Kθθ^2 - 2*γθθ*∂ᵣlnᾶ*frθθ
+#  - 2*frrr*frθθ*γθθ/γrr + 2*frrr*Kθθ*γθθ/sqrt(γrr) + 2*∂ᵣlnᾶ*Kθθ*γθθ*sqrt(γrr)
+#  + γrr*γθθ - 4*pi*γθθ^2*sqrt(γrr)*Sr + 8*pi*γθθ^2*γrr*ρ )/(
+#     frθθ^2*γrr - 2*frθθ*Kθθ*sqrt(γrr)^3 + Kθθ^2*γrr^2 - 2*frθθ*Krr*γθθ*sqrt(γrr)
+#  + 2*Krr*Kθθ*γrr*γθθ + γrr^2*γθθ + 4*pi*γθθ^2*sqrt(γrr)^3*Sr - 8*pi*γθθ^2*γrr^2*ρ )
+#
+# mul!(∂ᵣβʳ,D,βʳ)
+# mul!(∂ᵣ2βʳ,D,∂ᵣβʳ)
+
+#Gauge condition for preventing apparent horizon formation
+
+# @. βʳ = ( 2*rh*vh + ᾶ*γθθ*sqrt(γrr)*Kθθ )/frθθ
+#
+# mul!(∂ᵣβʳ,D,βʳ)
+# mul!(∂ᵣ2βʳ,D,∂ᵣβʳ)
+
+
+#Inject boundary into evolution equation for Upr
+
+# ∂tUpr = @part 1 ( -cp*∂rUpr - α*Umr*Upr/γrr - 9*α*Umθ^2*γrr/γθθ^2/2.
+#     + 3*α*Umθ*Upθ*γrr/γθθ^2 + 3*α*Upθ^2*γrr/γθθ^2/2. + 3*α*Umr*Umθ/γθθ
+#     + 3*α*Upr*Umθ/γθθ - 4*α*Upr*Upθ/γθθ - 2*∂rlnᾶ*(Upθ+Umθ)*α*sqrt(γrr)/γθθ
+#     - α*∂rlnᾶ*Upr/sqrt(γrr) + 2*∂rβr*Upr + ∂r2βr*sqrt(γrr) - α*∂rlnᾶ^2
+#     - α*∂r2lnᾶ + 16*pi*α*sqrt(γrr)*Sr - 8*pi*α*Srr + 4*pi*α*γrr*Tt )
+
+# Umθ = @part n ( Kθθ - frθθ/sqrt(γrr) )
+# Upθ = @part n ( Kθθ + frθθ/sqrt(γrr) )
+# Umr = @part n ( Krr - frrr/sqrt(γrr) )
+# Upr = @part n ( Krr + frrr/sqrt(γrr) )
+#
+# γrrrhs = ∂tγrr[n]; γθθrhs  = ∂tγθθ[n];
+# Krrrhs = ∂tKrr[n]; frrrrhs = ∂tfrrr[n];
+# Kθθrhs = ∂tKθθ[n]; frθθrhs = ∂tfrθθ[n];
+#
+# ∂tUmrb = @part n ( ∂tKrr - ∂tfrrr/sqrt(γrr) + frrr*∂tγrr/sqrt(γrr)^3/2 )
+#
+# # ∂tγrr[n] = s*(γrri[n] - γrr[n])/(dr̃*σ00)
+# # ∂tγθθ[n] = s*(γθθi[n] - γθθ[n])/(dr̃*σ00)
+# # ∂tγrr[n] = 0.
+# # ∂tγθθ[n] = 0.
+#
+# #println(γrri[n] - γrr[n])
+# #println(γθθi[n] - γθθ[n])
+#
+# # Mode speeds
+# cm = @part n ( -βr - α/sqrt(γrr) )
+# cp = @part n ( -βr + α/sqrt(γrr) )
+#
+# Umθb = Upθ*cp/cm
+# #Umθb = Kθθi[n] - frθθi[n]/sqrt(γrri[n])
+# #Umθb = Umθ
+#
+# ∂tKθθ[n]  += s*(Umθb - Umθ)/(dr̃*σ00)/2
+# ∂tfrθθ[n] += s*sqrt(γrr[n])*(Umθb - Umθ)/(dr̃*σ00)/2# + frθθ[n]*(∂tγrr[n]-γrrrhs)/γrr[n]/2
+#
+# ∂tUmθ = @part n ( ∂tKθθ - ∂tfrθθ/sqrt(γrr) + frθθ*∂tγrr/sqrt(γrr)^3/2 )
+#
+# Umθ = Umθb
+#
+# # Define derivative of incoming characteristic based on evolution equations
+# ######### Problem starts here
+# ∂rUmθ = @part n (-∂tUmθ + α + Upr*Umθ*α/γrr - (Upθ - Umθ)*Umθ*α/γθθ
+#  + α*∂rlnᾶ*Umθ/sqrt(γrr) + 4*pi*α*(γθθ*Tt - 2*Sθθ) )/cm
+#
+# # Calculate radial incoming characteristic based on constraints
+# Umrb = @part n (-Upr - Umθ*γrr/γθθ - 2*∂rUmθ*sqrt(γrr)/Umθ - γrr/Umθ
+#     + 8*pi*γrr*γθθ*(ρ - Sr/sqrt(γrr))/Umθ )
+#
+# ∂tKrr[n]  += s*(Umrb - Umr)/(dr̃*σ00)/2
+# ∂tfrrr[n] += s*sqrt(γrr[n])*(Umrb - Umr)/(dr̃*σ00)/2# + frrr[n]*(∂tγrr[n]-γrrrhs)/γrr[n]/2
+#
+# Umr = Umrb
+#
+# #∂tUmr = @part n ( ∂tKrr - ∂tfrrr/sqrt(γrr) + frrr*∂tγrr/sqrt(γrr)^3/2 )
+#
+# @part n ∂tγrr = -(Umr+Upr)*α - (Umr-Upr)*βr*sqrt(γrr) + 2*∂rβr*γrr + 4*(Umθ-Upθ)*βr*sqrt(γrr)^3/γθθ
+# @part n ∂tγθθ = -(Umθ+Upθ)*α - (Umθ-Upθ)*βr*sqrt(γrr)
+#
+# @part n ∂tγrr = 0.
+# @part n ∂tγθθ = 0.
+
+#println(∂tUmrb-∂tUmr)
+
+# println(Umθb - Umθ)
+
+
+
+# cp = -βr[n] + α[n]/sqrt(γrr[n])
+# cm = -βr[n] - α[n]/sqrt(γrr[n])
+
+# ∂tψ[n] += s*(  Π[n]/cm  )/(dr̃*σ00)
+# ∂tΠ[n] += s*( -Π[n] )/(dr̃*σ00)
+
+# ∂tψ[n] += s*(     (Π[n]+cp*ψ[n])/(cm-cp) )/(dr̃*σ00)
+# ∂tΠ[n] += s*( -cm*(Π[n]+cp*ψ[n])/(cm-cp) )/(dr̃*σ00)
+
+# cp = -βr[1] + α[1]/sqrt(γrr[1])
+# ψrhs = ∂tψ[1]; Πrhs = ∂tΠ[1];
+#
+# #∂t𝜙[1] = 0.
+# ∂tψ[1] += Πrhs/cp
+# ∂tΠ[1] = 0.
+
+# ∂tψ[n] += Πrhs/cm
+# ∂tΠ[n] = 0.
+
+# Γt = temp.x[5]; Γr = temp.x[6];
+#
+# @. Γt = (βr*∂rlnᾶ - ∂rβr)/α^2
+# @. Γr = 2*βr*∂rβr/α^2 - (1/γrr + (βr/α)^2)*∂rlnᾶ - 4*frθθ/(γrr*γθθ)
+#
+# @. ∂t𝜙 = Π
+# @. ∂tψ = ∂rΠ
+# @. ∂tΠ = (α^2)*((1/γrr-(βr/α)^2)*∂rψ + 2*(βr/α^2)*∂rΠ - Γr*ψ - Γt*Π - m^2*𝜙)
+
+# Specify the inner and outer temporal boundary conditions
+# for metric variables
+
+# Umθ = @part 1 ( Kθθ - frθθ/sqrt(γrr) )
+# Upθ = @part 1 ( Kθθ + frθθ/sqrt(γrr) )
+#
+# Umr = @part 1 ( Krr - frrr/sqrt(γrr) )
+# Upr = @part 1 ( Krr + frrr/sqrt(γrr) )
+#
+# γrrrhs = ∂tγrr[1]; γθθrhs = ∂tγθθ[1];
+# Krrrhs = ∂tKrr[1]; frrrrhs = ∂tfrrr[1];
+# Kθθrhs = ∂tKθθ[1]; frθθrhs = ∂tfrθθ[1];
+
+# dtU0r = (2*frrr[1] - 8*frθθ[1]*γrr[1]/γθθ[1])*βr[1] + 2*∂rβr[1]*γrr[1] - 2*α[1]*Krr[1]
+# dtU0θ = 2*frθθ[1]*βr[1] - 2*α[1]*Kθθ[1]
+
+# ∂tγrr[1] = dtU0r
+# ∂tγθθ[1] = dtU0θ
+
+#∂tUpr = ∂tKrr[1] + ∂tfrrr[1]/sqrt(γrr[1]) - frrr[1]*∂tγrr[1]/2/sqrt(γrr[1])^3
+
+#∂tUpr = 0. + 4*pi*α[1]*(γrr[1]*Tt[1] - 2*Srr[1]) + 16*pi*α[1]*sqrt(γrr[1])*Sr[1]
+
+# ∂tUpr = 0.
+#
+# @part 1 ∂tKrr = ∂tUpr/2 + Krrrhs/2 - frrrrhs/sqrt(γrr)/2 + frrr*γrrrhs/4/sqrt(γrr)^3
+# @part 1 ∂tfrrr = frrrrhs/2 + ∂tUpr*sqrt(γrr)/2 - Krrrhs*sqrt(γrr)/2 + frrr*γrrrhs/4/γrr
+#
+# ∂rUpθ = @part 1 ( (Umr + Upr)*Upθ/2/sqrt(γrr) + (1. + Upθ^2/γθθ)*sqrt(γrr)/2
+#     - 4*pi*sqrt(γrr)*γθθ*(ρ + Sr/sqrt(γrr)) )
+#
+# ∂tUpθ = @part 1 (α - (-βr + α/sqrt(γrr))*∂rUpθ + Umr*Upθ*α/γrr
+#     + (Upθ - Umθ)*Upθ*α/γθθ - α*∂rlnᾶ*Upθ/sqrt(γrr) + 4*pi*α*(γθθ*Tt - 2*Sθθ) )
+#
+# @part 1 ∂tKθθ  = ∂tUpθ/2 + Kθθrhs/2 - frθθrhs/sqrt(γrr)/2 + frθθ*γrrrhs/4/sqrt(γrr)^3
+# @part 1 ∂tfrθθ = frθθrhs/2 + ∂tUpθ*sqrt(γrr)/2 - Kθθrhs*sqrt(γrr)/2 + frθθ*γrrrhs/4/γrr
+
+# Outer boundary
+
+# Umθ = @part n ( Kθθ - frθθ/sqrt(γrr) )
+# Upθ = @part n ( Kθθ + frθθ/sqrt(γrr) )
+#
+# Umr = @part n ( Krr - frrr/sqrt(γrr) )
+# Upr = @part n ( Krr + frrr/sqrt(γrr) )
+#
+# γrrrhs = ∂tγrr[n]; γθθrhs = ∂tγθθ[n];
+# Krrrhs = ∂tKrr[n]; frrrrhs = ∂tfrrr[n];
+# Kθθrhs = ∂tKθθ[n]; frθθrhs = ∂tfrθθ[n];
+#
+# dtU0r = @part n ( (2*frrr - 8*frθθ*γrr/γθθ)*βr + 2*∂rβr*γrr - 2*α*Krr )
+# dtU0θ = @part n ( 2*frθθ*βr - 2*α*Kθθ )
+#
+# ∂tγrr[n] = dtU0r
+# ∂tγθθ[n] = dtU0θ
+#
+# #∂tUmr = ∂tKrr[n] - ∂tfrrr[n]/sqrt(γrr[n]) + frrr[n]*∂tγrr[n]/2/sqrt(γrr[n])^3
+# #∂tUmr = 0. + 4*pi*α[n]*(γrr[n]*Tt[n] - 2*Srr[n]) - 16*pi*α[n]*sqrt(γrr[n])*Sr[n]
+#
+# ∂tUmr = 0.
+#
+# @part n ∂tKrr  = ∂tUmr/2 + Krrrhs/2 + frrrrhs/sqrt(γrr)/2 - frrr*γrrrhs/4/sqrt(γrr)^3
+# @part n ∂tfrrr = (frrrrhs/2 - ∂tUmr*sqrt(γrr)/2 + Krrrhs*sqrt(γrr)/2
+#  - frrr*γrrrhs/4/γrr + frrr*dtU0r/2/γrr)
+#
+# ∂rUmθ = @part n ( -(Umr + Upr)*Umθ/2/sqrt(γrr) - (1. + Umθ^2/γθθ)*sqrt(γrr)/2
+#     + 4*pi*sqrt(γrr)*γθθ*(ρ - Sr/sqrt(γrr)) )
+#
+# ∂tUmθ = @part n ( α - (-βr - α/sqrt(γrr))*∂rUmθ + Upr*Umθ*α/γrr
+#     - (Upθ - Umθ)*Umθ*α/γθθ + α*∂rlnᾶ*Umθ/sqrt(γrr) + 4*pi*α*(γθθ*Tt - 2*Sθθ) )
+#
+# @part n ∂tKθθ  = ∂tUmθ/2 + Kθθrhs/2 + frθθrhs/sqrt(γrr)/2 - frθθ*γrrrhs/4/sqrt(γrr)^3
+# @part n ∂tfrθθ = (frθθrhs/2 - ∂tUmθ*sqrt(γrr)/2 + Kθθrhs*sqrt(γrr)/2
+#  - frθθ*γrrrhs/γrr/4 + frθθ*dtU0r/γrr/2)
+
+
+
 # ∂tKrr[1]  = Krrrhs
 # ∂tfrrr[1] = frrrrhs
 # ∂tKθθ[1]  = Kθθrhs
@@ -132,6 +407,106 @@
 #     df[n] = -(-48*f[n] + 59*f[n-1] - 8*f[n-2] - 3*f[n-3])/(34*dx)
 #
 # end
+
+# @inline function deriv2!(df::Vector{T}, f::Vector{T}, n::Int64, dx::T) where T
+#
+#     #@inbounds
+#
+#     df[1] = (2*f[1] - 5*f[2] + 4*f[3] - f[4])/(dx^2)
+#
+#     df[2] = (f[1] - 2*f[2] + f[3])/(dx^2)
+#
+#     df[3] = (-4*f[1] + 59*f[2] - 110*f[3] + 59*f[4] - 4*f[5])/(43*dx^2)
+#
+#     df[4] = (-f[1] + 59*f[3] - 118*f[4] + 64*f[5] - 4*f[6])/(49*dx^2)
+#
+#     for i in 5:(n - 4)
+#         df[i] = (-f[i-2] + 16*f[i-1] - 30*f[i] + 16*f[i+1] - f[i+2])/(12*dx^2)
+#     end
+#
+#     df[n-3] = (-f[n] + 59*f[n-2] - 118*f[n-3] + 64*f[n-4] - 4*f[n-5])/(49*dx^2)
+#
+#     df[n-2] = (-4*f[n] + 59*f[n-1] - 110*f[n-2] + 59*f[n-3] - 4*f[n-4])/(43*dx^2)
+#
+#     df[n-1] = (f[n] - 2*f[n-1] + f[n-2])/(dx^2)
+#
+#     df[n] = (2*f[n] - 5*f[n-1] + 4*f[n-2] - f[n-3])/(dx^2)
+#
+# end
+
+# Upθi = Kθθi[1] + frθθi[1]/sqrt(γrri[1])
+# Upθb = Upθi
+
+# Apply boundary condition to incoming characteristic using SAT
+# ∂tKθθ[1]  += s*(Upθb - Upθ[1])/(dr̃*σ00)/2.
+# ∂tfrθθ[1] += s*sqrt(γrr[1])*(Upθb - Upθ[1])/(dr̃*σ00)/2.
+
+# ∂tUpθ = @part 1 ∂tKθθ + ∂tfrθθ/sqrt(γrr) - frθθ*∂tγrr/sqrt(γrr)^3/2
+#
+# ∂rUpθ = @part 1 ∂rKθθ + ∂rfrθθ/sqrt(γrr) - frθθ*∂rγrr/sqrt(γrr)^3/2
+# ∂rUmθ = @part 1 ∂rKθθ - ∂rfrθθ/sqrt(γrr) + frθθ*∂rγrr/sqrt(γrr)^3/2
+
+# ∂rUpθ = @part 1 ∂rKθθ + ∂rfrθθ/sqrt(γrr) - frθθ*(2*frrr - 8*frθθ*γrr/γθθ)/sqrt(γrr)^3/2
+# ∂rUmθ = @part 1 ∂rKθθ - ∂rfrθθ/sqrt(γrr) + frθθ*(2*frrr - 8*frθθ*γrr/γθθ)/sqrt(γrr)^3/2
+
+# @. Upθv /= Kθθi + frθθi/sqrt(γrri)
+# ∂rUpθ = (-25*Upθv[1] + 48*Upθv[2] - 36*Upθv[3] + 16*Upθv[4] - 3*Upθv[5])/(12*dr̃)/drdr̃[1]
+# ∂rUpθ = @part 1 ∂rUpθ*(Kθθi + frθθi/sqrt(γrri)) + Upθv*(∂rKθθi + ∂rfrθθi/sqrt(γrri) - frθθi*∂rγrri/sqrt(γrri)^3/2)
+
+#Calculate radial incoming characteristic based on constraints
+# Uprb = @part 1 (-Umr - Upθ*γrr/γθθ + 2*∂rUpθ*sqrt(γrr)/Upθ - γrr/Upθ
+#     + 8*pi*γrr*γθθ*(ρ + Sr/sqrt(γrr))/Upθ )
+
+#Define derivative of incoming characteristic based on evolution equations
+# ∂rUpθ = @part 1 (-∂tUpθ + α + Umr*Upθ*α/γrr + (Upθ - Umθ)*Upθ*α/γθθ
+# - α*∂rlnᾶ*Upθ/sqrt(γrr) + 4*pi*α*(γθθ*Tt - 2*Sθθ) )/cp
+#
+# ∂rUmθ = @part 1 (-∂tUmθ + α + Upr*Umθ*α/γrr - (Upθ - Umθ)*Umθ*α/γθθ
+#  + α*∂rlnᾶ*Umθ/sqrt(γrr) + 4*pi*α*(γθθ*Tt - 2*Sθθ) )/cm
+
+# a = 1 pure constraint Dirichlet
+# a =-1 pure constraint Neumann
+# a = 0 pure constraint freezing
+
+# a = 0.
+#
+# Uprb = @part 1 ( -Umr + (-2*(cp*∂rUpθ+a*cm*∂rUmθ)*sqrt(γrr) - (a*cm*Umθ^2-cp*Upθ^2)*γrr/γθθ
+#   - (a*cm-cp)*γrr - 8*pi*(a*cm+cp)*sqrt(γrr)*γθθ*Sr + 8*pi*(a*cm-cp)*γrr*γθθ*ρ )/(a*cm*Umθ-cp*Upθ) )
+
+# a = cm/cp
+
+# Uprb = @part 1 ( -Umr + (2*(a*∂rUpθ-∂rUmθ)*sqrt(γrr) - (a*Upθ^2+Umθ^2)*γrr/γθθ
+# - (1+a)*γrr + 8*pi*(a-1)*sqrt(γrr)*γθθ*Sr + 8*pi*(1+a)*γrr*γθθ*ρ )/(a*Upθ+Umθ) )
+
+# ∂rcm = @part 1 ( -∂rβr - ∂rα/sqrt(γrr) + α*∂rγrr/sqrt(γrr)^3/2  )
+# ∂rcp = @part 1 ( -∂rβr + ∂rα/sqrt(γrr) - α*∂rγrr/sqrt(γrr)^3/2  )
+
+# ∂rcm = @part 1 ( -∂rβr - ∂rᾶ*γθθ - ᾶ*sqrt(γrr)*Umθ*(cm/cp-1)  )
+# ∂rcp = @part 1 ( -∂rβr + ∂rᾶ*γθθ + ᾶ*sqrt(γrr)*Umθ*(cm/cp-1)  )
+#
+# # Uprb = @part 1 ( -Umr + (∂rcm/cm - ∂rcp/cp)*sqrt(γrr) - (1+cp/cm)*γrr/Umθ/2
+# #  - (1+cm/cp)*Umθ*γrr/γθθ/2 + 4*pi*γrr*γθθ*((1+cp/cm)*ρ - (1-cp/cm)*Sr/sqrt(γrr))/Umθ )
+#
+# Uprb = @part 1 ( -Umr + (∂rcm/cm - ∂rcp/cp)*sqrt(γrr) - (1+cp/cm)*γrr/Umθ/2
+#  - (1+cm/cp)*Umθ*γrr/γθθ/2 + 2*pi*γrr*γθθ*(1+cm/cp)*Um𝜙^2/Umθ )
+
+# Uprb = @part 1 Krri + frrri/sqrt(γrri)
+
+# ∂tKrr[1]  += s*(Uprb - Upr)/(dr̃*σ00)/2.
+# ∂tfrrr[1] += s*sqrt(γrr[1])*(Uprb - Upr)/(dr̃*σ00)/2.
+
+# ∂tUmr = ∂tKrr[1] - ∂tfrrr[1]/sqrt(γrr[1]) + frrr[1]*∂tγrr[1]/2/sqrt(γrr[1])^3
+#
+# #∂tUpr = 0. + 4*pi*α[1]*(γrr[1]*Tt[1] - 2*Srr[1]) + 16*pi*α[1]*sqrt(γrr[1])*Sr[1]
+#
+# # ∂tUpθ = @part 1 (α - (-βr + α/sqrt(γrr))*∂rUpθ + Umr*Upθ*α/γrr
+# #     + (Upθ - Umθ)*Upθ*α/γθθ - α*∂rlnᾶ*Upθ/sqrt(γrr) + 4*pi*α*(γθθ*Tt - 2*Sθθ) )
+#
+# #Uprb = @part 1 ( -∂tγrr/α/2 + βr*frrr/α + frrr/sqrt(γrr) + ∂rβr*γrr/α - 4*frθθ*βr*γrr/γθθ/α )
+#
+# ∂tUpr = 0. #+ s*(Uprb - Upr)/(dr̃*σ00)/2
+#
+
 
 #########################
 
