@@ -51,6 +51,9 @@ end
 expr_index(x::Number, i...) = x
 expr_index(a::AbstractArray, i...) = a[i...]
 
+# Total number of variables in the state vector
+const numvar = 9
+
 # Type to store all of the grid functions for the ODE Solver
 VarContainer{T} = ArrayPartition{T, NTuple{numvar, Vector{T}}}
 
@@ -513,7 +516,8 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     is_AH = false
     for i in 1:n-1 if AH[i]*AH[i+1] <= 0. is_AH = true; break; end end
 
-    s = 0.001
+    # s1 = 0.5 /(dr̃*Σ[1,1]*sqrt(γrr[1])*γθθ[1])
+    # sn = 0.5 /(dr̃*Σ[n,n]*sqrt(γrr[n])*γθθ[n])
 
     if !(is_AH)
 
@@ -532,12 +536,12 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         Upθb = @part 1 ((2*M0*sqrt(γθθ) - γθθ)/Umθ)
 
         #Dirichlet on scalar
-        Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
+        #Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
         # #Neumann on scalar
         #Up𝜙b = @part 1 sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
 
-        # Static
-        #Up𝜙b = Um𝜙
+        # Static Dirichlet
+        Up𝜙b = @part 1 (cm/cp)*Um𝜙
 
         # ∂ᵣUmθ = @part 1 ∂ᵣKθθ - ∂ᵣfrθθ/sqrt(γrr) + frθθ*(2*frrr - 8*frθθ*γrr/γθθ)/(2*sqrt(γrr)^3)
         #Uprb = @part 1 (-Umr - γrr*Umθ/γθθ - (2*∂ᵣUmθ*sqrt(γrr) + γrr)/Umθ )
@@ -559,14 +563,16 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         # ∂ₜΠ[1] = 0
         # ∂ₜψ[1] += s*(-Π[1])/(dr̃*Σ[1,1])/2.
 
-        ∂ₜΠ[1] += s*(Up𝜙b - Up𝜙)/(dr̃*Σ[1,1])/2.
-        ∂ₜψ[1] += s*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/(dr̃*Σ[1,1])/2.
+        s1 = abs(cp[1])/Σ[1,1]
 
-        ∂ₜKrr[1]  += s*(Uprb - Upr)/(dr̃*Σ[1,1])/2.
-        ∂ₜfrrr[1] += s*sqrt(γrr[1])*(Uprb - Upr)/(dr̃*Σ[1,1])/2.
+        ∂ₜΠ[1] += s1*(Up𝜙b - Up𝜙)/2.
+        ∂ₜψ[1] += s1*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/2.
 
-        ∂ₜKθθ[1]  += s*(Upθb - Upθ)/(dr̃*Σ[1,1])/2.
-        ∂ₜfrθθ[1] += s*sqrt(γrr[1])*(Upθb - Upθ)/(dr̃*Σ[1,1])/2.
+        ∂ₜKrr[1]  += s1*(Uprb - Upr)/2.
+        ∂ₜfrrr[1] += s1*sqrt(γrr[1])*(Uprb - Upr)/2.
+
+        ∂ₜKθθ[1]  += s1*(Upθb - Upθ)/2.
+        ∂ₜfrθθ[1] += s1*sqrt(γrr[1])*(Upθb - Upθ)/2.
 
     end
 
@@ -597,8 +603,8 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # #Neumann on scalar
     # Up𝜙b = @part 1 sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
 
-    # Static
-    Um𝜙b = @part n -(cm/cp)*Up𝜙
+    # Static Neumann
+    Um𝜙b = @part n -(cp/cm)*Up𝜙
 
     Umrb = Umri
 
@@ -612,14 +618,16 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     #@part n ∂ₜγθθ = sqrt(γrr)*(cm*Umθb-cp*Upθ)
     @part n ∂ₜ𝜙   = (βʳ*ψ - α*Π)
 
-    ∂ₜΠ[n] += s*(Um𝜙b - Um𝜙)/(dr̃*Σ[n,n])/2.
-    ∂ₜψ[n] += -s*sqrt(γrr[n])*(Um𝜙b - Um𝜙)/(dr̃*Σ[n,n])/2.
+    sn = abs(cm[n])/Σ[n,n]
 
-    ∂ₜKrr[n]  += s*(Umrb - Umr)/(dr̃*Σ[n,n])/2.
-    ∂ₜfrrr[n] += -s*sqrt(γrr[n])*(Umrb - Umr)/(dr̃*Σ[n,n])/2.
+    ∂ₜΠ[n] += sn*(Um𝜙b - Um𝜙)/2.
+    ∂ₜψ[n] += -sn*sqrt(γrr[n])*(Um𝜙b - Um𝜙)/2.
 
-    ∂ₜKθθ[n]  += s*(Umθb - Umθ)/(dr̃*Σ[n,n])/2.
-    ∂ₜfrθθ[n] += -s*sqrt(γrr[n])*(Umθb - Umθ)/(dr̃*Σ[n,n])/2.
+    ∂ₜKrr[n]  += sn*(Umrb - Umr)/2.
+    ∂ₜfrrr[n] += -sn*sqrt(γrr[n])*(Umrb - Umr)/2.
+
+    ∂ₜKθθ[n]  += sn*(Umθb - Umθ)/2.
+    ∂ₜfrθθ[n] += -sn*sqrt(γrr[n])*(Umθb - Umθ)/2.
 
     # γrrrhs = ∂ₜγrr[n]; γθθrhs = ∂ₜγθθ[n];
     # Krrrhs = ∂ₜKrr[n]; frrrrhs = ∂ₜfrrr[n];
@@ -784,7 +792,8 @@ function constraints(regstate::VarContainer{T},param) where T
     #println((dr̃*Wg*Dr + dr̃*(D')*Wg + B*rootγ)[1:6,1:6])
 
     #E  = dr̃*( Π'*Wv*(Dr*ψ) + (D*Π)'*Ws*ψ ) #check
-    E  = (Π'*Wv*Π +  ψ'*Wv*ψ )
+    #E  = (Π'*Wv*Π +  ψ'*Wv*ψ )
+    E = (α.*Π)'*Wv*Π/2. +  (α.*ψ./γrr)'*Wv*ψ/2. - (βʳ.*Π)'*Wv*ψ
 
     #E  = dr̃*sum(Σ*( @. (frθθ*ρ - Kθθ*Sr)*4*pi*sqrt(γθθ)*drdr̃ ) )
     Ec = dr̃*sum(Σ*( @. (C^2 + Cr^2/γrr)*4*pi*sqrt(γrr)*γθθ*drdr̃ ))
