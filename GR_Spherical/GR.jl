@@ -19,7 +19,6 @@ using FileIO
 # Include the input parameter file
 
 include("inputfile.jl")
-include("SBP_coeffs_6-3.jl")
 
 # Macro for applying get_index to an expression
 # helps to clean up the boundary conditions
