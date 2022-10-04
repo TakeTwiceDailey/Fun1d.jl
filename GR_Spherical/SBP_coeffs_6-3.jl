@@ -1,4 +1,4 @@
-###### Parameters for the 4-3 SBP Operator ######
+###### Parameters for the 6-3 SBP Operator ######
 
 # Obtained from arXiv:gr-qc/0512001
 
@@ -10,7 +10,7 @@
 # and you can read off the coefficients as directed
 # in the appendix of the paper.
 
-# Coefficents of the inverse norm σi_{mn}
+# Coefficents of the norm σij
 
 const σ11 =  T(13649)/43200
 const σ22 =  T(12013)/8640
@@ -19,76 +19,15 @@ const σ44 =  T(5359)/4320
 const σ55 =  T(7877)/8640
 const σ66 =  T(43801)/43200
 
-# The norm is block diagonal and symmetric, with the interior
+# The norm is diagonal and symmetric, with the interior
 # like the identity matrix.
-# You can also see the norm is diagonal
 # Form the 'left' and 'right' blocks of the matrix:
 
 const σnl = T[σ11, σ22 ,σ33 ,σ44 ,σ55 ,σ66];
 const σnr = σnl[end:-1:1];
 
 # First derivative coefficents
-# Defines the coefficents of the D_{6-3} operator q_{ij}
-
-# const q11 = -21600.0/13649.0
-# const q21 = 81763.0/40947.0
-# const q31 = 131.0/27298.0
-# const q41 = -9143.0/13649.0
-# const q51 = 20539.0/81894.0
-# const q61 = 0.
-# const q71 = 0.
-# const q81 = 0.
-# const q91 = 0.
-#
-# const q12 = -81763.0/180195.0
-# const q22 = 0.
-# const q32 = 7357.0/36039.0
-# const q42 = 30637.0/72078.0
-# const q52 = -2328.0/12013.0
-# const q62 = 6611.0/360390.0
-# const q72 = 0.
-# const q82 = 0.
-# const q92 = 0.
-#
-# const q13 = -131.0/54220.0
-# const q23 = -7357.0/16266.0
-# const q33 = 0.
-# const q43 = 645.0/2711.0
-# const q53 = 11237.0/32532.0
-# const q63 = -3487.0/27110.0
-# const q73 = 0.
-# const q83 = 0.
-# const q93 = 0.
-#
-# const q14 = 9143.0/53590.0
-# const q24 = -30637.0/64308.0
-# const q34 =  -645.0/5359.0
-# const q44 = 0.
-# const q54 = 13733.0/32154.0
-# const q64 = -67.0/4660.0
-# const q74 = 72.0/5359.0
-# const q84 = 0.
-# const q94 = 0.
-#
-# const q15 = -20539.0/236310.0
-# const q25 = 2328.0/7877.0
-# const q35 = -11237.0/47262.0
-# const q45 = -13733.0/23631.0
-# const q55 = 0.
-# const q65 = 89387.0/118155.0
-# const q75 = -1296.0/7877.0
-# const q85 = 144.0/7877.0
-# const q95 = 0.
-#
-# const q16 = 0.
-# const q26 = -6611.0/262806.0
-# const q36 = 3487.0/43801.0
-# const q46 = 1541.0/87602.0
-# const q56 = -89387.0/131403.0
-# const q66 = 0.
-# const q76 = 32400.0/43801.0
-# const q86 = -6480.0/43801.0
-# const q96 = 720.0/43801.0
+# Defines the coefficents of the D_{6-3} operator qij
 
 const q11 = T"-1.582533518939116418785258993332844897062"
 const q21 = T"2.033426786468126253898161347360808173712"
@@ -150,6 +89,68 @@ const q76 = T"0.7397091390607520376247117645715851236273"
 const q86 = T"-0.1479418278121504075249423529143170247255"
 const q96 = T"0.01643798086801671194721581699047966941394"
 
+# These coefficents are for the unobtimized 6-3 operator:
+
+# const q11 = -21600.0/13649.0
+# const q21 = 81763.0/40947.0
+# const q31 = 131.0/27298.0
+# const q41 = -9143.0/13649.0
+# const q51 = 20539.0/81894.0
+# const q61 = 0.
+# const q71 = 0.
+# const q81 = 0.
+# const q91 = 0.
+#
+# const q12 = -81763.0/180195.0
+# const q22 = 0.
+# const q32 = 7357.0/36039.0
+# const q42 = 30637.0/72078.0
+# const q52 = -2328.0/12013.0
+# const q62 = 6611.0/360390.0
+# const q72 = 0.
+# const q82 = 0.
+# const q92 = 0.
+#
+# const q13 = -131.0/54220.0
+# const q23 = -7357.0/16266.0
+# const q33 = 0.
+# const q43 = 645.0/2711.0
+# const q53 = 11237.0/32532.0
+# const q63 = -3487.0/27110.0
+# const q73 = 0.
+# const q83 = 0.
+# const q93 = 0.
+#
+# const q14 = 9143.0/53590.0
+# const q24 = -30637.0/64308.0
+# const q34 =  -645.0/5359.0
+# const q44 = 0.
+# const q54 = 13733.0/32154.0
+# const q64 = -67.0/4660.0
+# const q74 = 72.0/5359.0
+# const q84 = 0.
+# const q94 = 0.
+#
+# const q15 = -20539.0/236310.0
+# const q25 = 2328.0/7877.0
+# const q35 = -11237.0/47262.0
+# const q45 = -13733.0/23631.0
+# const q55 = 0.
+# const q65 = 89387.0/118155.0
+# const q75 = -1296.0/7877.0
+# const q85 = 144.0/7877.0
+# const q95 = 0.
+#
+# const q16 = 0.
+# const q26 = -6611.0/262806.0
+# const q36 = 3487.0/43801.0
+# const q46 = 1541.0/87602.0
+# const q56 = -89387.0/131403.0
+# const q66 = 0.
+# const q76 = 32400.0/43801.0
+# const q86 = -6480.0/43801.0
+# const q96 = 720.0/43801.0
+
 # The D_{6-3} operator is only different from a 6th order
 # centered finite differencing operator at the left and right boundaries
 # Form these 'left' and 'right' blocks:
@@ -159,7 +160,7 @@ const ql =  T[ q11 q21 q31 q41 q51 q61 q71 q81 q91 ;
                q13 q23 q33 q43 q53 q63 q73 q83 q93 ;
                q14 q24 q34 q44 q54 q64 q74 q84 q94 ;
                q15 q25 q35 q45 q55 q65 q75 q85 q95 ;
-               q16 q26 q36 q46 q56 q66 q76 q86 q96 ]
+               q16 q26 q36 q46 q56 q66 q76 q86 q96 ];
 
 # Important to note that there is a minus sign difference on the right block
 
@@ -174,25 +175,18 @@ Dc = spdiagm(-3=> -1*ones(T,n-3), -2=> 9*ones(T,n-2), -1=> -45*ones(T,n-1),
 Dc[1:6,1:9] .= ql; Dc[n-5:n,n-8:n] .= qr;
 
 # Define SBP differencing operator
-const D = Dc/dr̃;
-
-# Next form the dissipation operator
-
-# Third Derivative Operator
-# Coefficents as defined in the paper
-# D3 = spdiagm(-1=>ones(T,n-1),0=>-2*ones(T,n),1=>ones(T,n-1));
-# D3[1,1:3] .= D3[2,1:3]; D3[n,n-2:n] .= D3[n-1,n-2:n];
+const D = Dc/dr;
 
 # Norm
 # Form the full sparse norm matrix
 vec = ones(T,n);
 vec[1:6] .= σnl; vec[n-5:n] .= σnr;
 
-const Σ = dr̃*spdiagm(vec);
+const Σ = dr*spdiagm(vec);
 
 # Inverse norm
 # Form the full sparse inverse norm matrix
-const Σi = dr̃*spdiagm(1. ./vec);
+const Σi = dr*spdiagm(1 ./vec);
 
 # Complete construction of the dissipation operator
 
@@ -261,7 +255,7 @@ const al =  T[ a11 a21 a31 a41 a51 a61 a71 a81 a91 ;
                a13 a23 a33 a43 a53 a63 a73 a83 a93 ;
                a14 a24 a34 a44 a54 a64 a74 a84 a94 ;
                a15 a25 a35 a45 a55 a65 a75 a85 a95 ;
-               a16 a26 a36 a46 a56 a66 a76 a86 a96 ]
+               a16 a26 a36 a46 a56 a66 a76 a86 a96 ];
 
 const ar = al[end:-1:1,end:-1:1];
 
@@ -271,4 +265,26 @@ Ac = spdiagm(-3=>     ones(T,n-3), -2=> -6*ones(T,n-2), -1=> 15*ones(T,n-1),
 
 Ac[1:6,1:9] .= al; Ac[n-5:n,n-8:n] .= ar;
 
-const A = ε*Ac;
+const D4 = ε*Ac;
+
+
+# Averaging operator
+
+
+# Ac = spdiagm(-3=>  -3*ones(T,n-3), -2=> -2*ones(T,n-2), -1=> -1*ones(T,n-1),
+#               1=>     ones(T,n-1),  2=>  2*ones(T,n-2),  3=>  3*ones(T,n-3));
+
+# il =  T[ 0  1  2  3  4  5  6  7  8 ;
+#         -1  0  1  2  3  4  5  6  7 ;
+#         -2 -1  0  1  2  3  4  5  6 ;
+#         -3 -2 -1  0  1  2  3  4  5 ;
+#         -4 -3 -2 -1  0  1  2  3  4 ;
+#         -5 -4 -3 -2 -1  0  1  2  3 ];
+
+# ir = -il[end:-1:1,end:-1:1];
+
+# Al = il.*ql; Ar = ir.*qr;
+
+# Ac[1:6,1:9] .= Al; Ac[n-5:n,n-8:n] .= Ar;
+
+# const A = copy(Ac)

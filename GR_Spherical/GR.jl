@@ -16,6 +16,8 @@ using ForwardDiff
 using HDF5
 using FileIO
 
+using PrettyTables
+
 # Include the input parameter file
 
 include("inputfile.jl")
@@ -57,8 +59,8 @@ const numvar = 9
 VarContainer{T} = ArrayPartition{T, NTuple{numvar, Vector{T}}}
 
 struct Domain{S}
-    xmin::S
-    xmax::S
+    rmin::S
+    rmax::S
 end
 
 struct Grid{S}
@@ -68,15 +70,7 @@ end
 
 # Main parameter struct passed to ODE Solver
 struct Param{T}
-    r̃min::T
-    r̃max::T
     grid::Grid{T}
-    r::Function
-    drdr̃::Function
-    d2rdr̃::Function
-    rsamp::Vector{T}
-    drdr̃samp::Vector{T}
-    d2rdr̃samp::Vector{T}
     gauge::VarContainer{T}
     speeds::VarContainer{T}
     init_state::VarContainer{T}
@@ -84,9 +78,7 @@ struct Param{T}
     state::VarContainer{T}
     drstate::VarContainer{T}
     dtstate::VarContainer{T}
-    dissipation::VarContainer{T}
     temp::VarContainer{T}
-    Dr::SparseMatrixCSC{T,Int64}
 end
 
 # Defines how to allocate the grid functions
@@ -117,9 +109,9 @@ end
 # Sample analytic functions to the grid
 function sample!(f::Vector{T}, grid::Grid{S}, fun) where {S,T}
 
-    r̃min = grid.domain.xmin
+    rmin = grid.domain.rmin
 
-    f .= T[fun(r̃min + dr̃*(j-1)) for j in 1:(grid.ncells)]
+    f .= T[fun(rmin + dr*(j-1)) for j in 1:(grid.ncells)]
 
 end
 
@@ -140,14 +132,14 @@ end
 
 sign = 1.
 
-fᾶ(M,r,r̃) = 1/(r(r̃)^2 + 2*M(r̃)*r(r̃))
-fβʳ(M,r,r̃) = sign*2*M(r̃)/(2*M(r̃)+r(r̃))
-fγrr(M,r,r̃) = 1 + 2*M(r̃)/r(r̃)
-fγθθ(M,r,r̃) = r(r̃)^2
+fᾶ(M,r) = 1/(r^2 + 2*M(r)*r)
+fβʳ(M,r) = sign*2*M(r)/(2*M(r)+r)
+fγrr(M,r) = 1 + 2*M(r)/r
+fγθθ(M,r) = r^2
 
-fᾶ(M::Number,r,r̃) = 1/(r(r̃)^2+2*M*r(r̃))
-fβʳ(M::Number,r,r̃) = sign*2*M/(2*M+r(r̃))
-fγrr(M::Number,r,r̃) = 1 + 2*M/r(r̃)
+fᾶ(M::Number,r) = 1/(r^2+2*M*r)
+fβʳ(M::Number,r) = sign*2*M/(2*M+r)
+fγrr(M::Number,r) = 1 + 2*M/r
 
 ### NOTE: other coordinate systems require
 #   careful consideration of reg_list in inputfile.jl
@@ -180,38 +172,38 @@ fγrr(M::Number,r,r̃) = 1 + 2*M/r(r̃)
 
 # Define derivatives, extrinsic curavture, and the f_{ijk} variables
 
-fα(M,r,r̃) = fᾶ(M,r,r̃)*fγθθ(M,r,r̃)*sqrt(fγrr(M,r,r̃))
+fα(M,r) = fᾶ(M,r)*fγθθ(M,r)*sqrt(fγrr(M,r))
 
-fcp(M,r,r̃) = -fβʳ(M,r,r̃) + fα(M,r,r̃)/sqrt(fγrr(M,r,r̃))
-fcm(M,r,r̃) = -fβʳ(M,r,r̃) - fα(M,r,r̃)/sqrt(fγrr(M,r,r̃))
+fcp(M,r) = -fβʳ(M,r) + fα(M,r)/sqrt(fγrr(M,r))
+fcm(M,r) = -fβʳ(M,r) - fα(M,r)/sqrt(fγrr(M,r))
 
-f∂r̃ᾶ(M,r,r̃)         = ForwardDiff.derivative(r̃ -> fᾶ(M,r,r̃), r̃)
-f∂r̃2ᾶ(M,r,r̃)        = ForwardDiff.derivative(r̃ -> f∂r̃ᾶ(M,r,r̃), r̃)
-f∂r̃βʳ(M,r,r̃)        = ForwardDiff.derivative(r̃ -> fβʳ(M,r,r̃), r̃)
-f∂r̃2βʳ(M,r,r̃)       = ForwardDiff.derivative(r̃ -> f∂r̃βʳ(M,r,r̃), r̃)
-f∂r̃cp(M,r,r̃)        = ForwardDiff.derivative(r̃ -> fcp(M,r,r̃), r̃)
-f∂r̃2cp(M,r,r̃)       = ForwardDiff.derivative(r̃ -> f∂r̃cp(M,r,r̃), r̃)
-f∂r̃cm(M,r,r̃)        = ForwardDiff.derivative(r̃ -> fcm(M,r,r̃), r̃)
-f∂r̃2cm(M,r,r̃)       = ForwardDiff.derivative(r̃ -> f∂r̃cm(M,r,r̃), r̃)
+f∂ᵣᾶ(M,r)         = ForwardDiff.derivative(r -> fᾶ(M,r), r)
+f∂ᵣ2ᾶ(M,r)        = ForwardDiff.derivative(r -> f∂ᵣᾶ(M,r), r)
+f∂ᵣβʳ(M,r)        = ForwardDiff.derivative(r -> fβʳ(M,r), r)
+f∂ᵣ2βʳ(M,r)       = ForwardDiff.derivative(r -> f∂ᵣβʳ(M,r), r)
+f∂ᵣcp(M,r)        = ForwardDiff.derivative(r -> fcp(M,r), r)
+f∂ᵣ2cp(M,r)       = ForwardDiff.derivative(r -> f∂ᵣcp(M,r), r)
+f∂ᵣcm(M,r)        = ForwardDiff.derivative(r -> fcm(M,r), r)
+f∂ᵣ2cm(M,r)       = ForwardDiff.derivative(r -> f∂ᵣcm(M,r), r)
 
-f∂ᵣβʳ(M,r,r̃)  = ForwardDiff.derivative(r̃ -> fβʳ(M,r,r̃),  r̃)/drdr̃(r̃)
-f∂ᵣγrr(M,r,r̃) = ForwardDiff.derivative(r̃ -> fγrr(M,r,r̃), r̃)/drdr̃(r̃)
-f∂ᵣγθθ(M,r,r̃) = ForwardDiff.derivative(r̃ -> fγθθ(M,r,r̃), r̃)/drdr̃(r̃)
+f∂ᵣβʳ(M,r)  = ForwardDiff.derivative(r -> fβʳ(M,r),  r)
+f∂ᵣγrr(M,r) = ForwardDiff.derivative(r -> fγrr(M,r), r)
+f∂ᵣγθθ(M,r) = ForwardDiff.derivative(r -> fγθθ(M,r), r)
 
-fKrr(M,∂ₜγrr,r,r̃) = -(∂ₜγrr(M,r,r̃) - fβʳ(M,r,r̃)*f∂ᵣγrr(M,r,r̃) - 2*fγrr(M,r,r̃)*f∂ᵣβʳ(M,r,r̃))/(2*fα(M,r,r̃))
-fKθθ(M,∂ₜγθθ,r,r̃) = -(∂ₜγθθ(M,r,r̃) - fβʳ(M,r,r̃)*f∂ᵣγθθ(M,r,r̃))/(2*fα(M,r,r̃))
-ffrθθ(M,r,r̃) = f∂ᵣγθθ(M,r,r̃)/2
-ffrrr(M,r,r̃) = (f∂ᵣγrr(M,r,r̃) + 8*fγrr(M,r,r̃)*ffrθθ(M,r,r̃)/fγθθ(M,r,r̃))/2
+fKrr(M,∂ₜγrr,r) = -(∂ₜγrr(M,r) - fβʳ(M,r)*f∂ᵣγrr(M,r) - 2*fγrr(M,r)*f∂ᵣβʳ(M,r))/(2*fα(M,r))
+fKθθ(M,∂ₜγθθ,r) = -(∂ₜγθθ(M,r) - fβʳ(M,r)*f∂ᵣγθθ(M,r))/(2*fα(M,r))
+ffrθθ(M,r) = f∂ᵣγθθ(M,r)/2
+ffrrr(M,r) = (f∂ᵣγrr(M,r) + 8*fγrr(M,r)*ffrθθ(M,r)/fγθθ(M,r))/2
 
-f∂ᵣKrr(M,∂ₜγrr,r,r̃)   = ForwardDiff.derivative(r̃ -> fKrr(M,∂ₜγrr,r,r̃), r̃)/drdr̃(r̃)
-f∂ᵣfrrr(M,r,r̃)       = ForwardDiff.derivative(r̃ -> ffrrr(M,r,r̃), r̃)/drdr̃(r̃)
-f∂ᵣKθθ(M,∂ₜγθθ,r,r̃)   = ForwardDiff.derivative(r̃ -> fKθθ(M,∂ₜγθθ,r,r̃), r̃)/drdr̃(r̃)
-f∂ᵣfrθθ(M,r,r̃)       = ForwardDiff.derivative(r̃ -> ffrθθ(M,r,r̃), r̃)/drdr̃(r̃)
+f∂ᵣKrr(M,∂ₜγrr,r)   = ForwardDiff.derivative(r -> fKrr(M,∂ₜγrr,r), r)
+f∂ᵣfrrr(M,r)       = ForwardDiff.derivative(r -> ffrrr(M,r), r)
+f∂ᵣKθθ(M,∂ₜγθθ,r)   = ForwardDiff.derivative(r -> fKθθ(M,∂ₜγθθ,r), r)
+f∂ᵣfrθθ(M,r)       = ForwardDiff.derivative(r -> ffrθθ(M,r), r)
 
-f∂ᵣ𝜙(M,r,r̃)         = ForwardDiff.derivative(r̃ -> f𝜙(M,r,r̃), r̃)/drdr̃(r̃)
+f∂ᵣ𝜙(M,r)          = ForwardDiff.derivative(r -> f𝜙(M,r), r)
 
-fψ(M,r,r̃) = f∂ᵣ𝜙(M,r,r̃)
-fΠ(M,r,r̃) = -(f∂ₜ𝜙(M,r,r̃) - fβʳ(M,r,r̃)*fψ(M,r,r̃) )/fα(M,r,r̃)
+fψr(M,r) = f∂ᵣ𝜙(M,r)
+fΠ(M,r) = -(f∂ₜ𝜙(M,r) - fβʳ(M,r)*fψr(M,r) )/fα(M,r)
 
 function init!(state::VarContainer{T}, param) where T
 
@@ -224,47 +216,42 @@ function init!(state::VarContainer{T}, param) where T
     gauge = param.gauge
     speeds = param.speeds
 
-    γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,ψ,Π = state.x
+    γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,ψr,Π = state.x
     ᾶ,βʳ,∂ᵣᾶ,∂ᵣβʳ,∂ᵣ2ᾶ,∂ᵣ2βʳ,∂ᵣ3βʳ,∂ᵣ4βʳ,∂ᵣ5βʳ = gauge.x
     cp,cm,∂ᵣcp,∂ᵣcm,∂ᵣ2cp,∂ᵣ2cm,∂ᵣ3cp,∂ᵣ4cp,∂ᵣ5cp = speeds.x
-    γrri,γθθi,Krri,Kθθi,frrri,frθθi,𝜙i,ψi,Πi = init_state.x
-    ∂ᵣγrr,∂ᵣγθθ,∂ᵣKrr,∂ᵣKθθ,∂ᵣfrrr,∂ᵣfrθθ,∂ᵣ𝜙,∂ᵣψ,∂ᵣΠ = init_drstate.x
+    γrri,γθθi,Krri,Kθθi,frrri,frθθi,𝜙i,ψri,Πi = init_state.x
+    ∂ᵣγrr,∂ᵣγθθ,∂ᵣKrr,∂ᵣKθθ,∂ᵣfrrr,∂ᵣfrθθ,∂ᵣ𝜙,∂ᵣψr,∂ᵣΠ = init_drstate.x
 
     grid = param.grid
-    # dr̃ = spacing(grid)
-    r = param.r
-    drdr̃ = param.drdr̃
-    d2rdr̃ = param.d2rdr̃
-    r̃min = param.r̃min
-    r̃max = param.r̃max
+    rmin = grid.domain.rmin
+    rmax = grid.domain.rmax
 
     n = grid.ncells
-    r̃span = (r̃min,r̃max)
+    rspan = (rmin,rmax)
 
-    # fρ(M,r,r̃) = ( fΠ(M,r,r̃)^2 + fψ(M,r,r̃)^2/fγrr(M,r,r̃) + m^2*f𝜙(M,r,r̃)^2 )/2.
-    # fSr(M,r,r̃) = fψ(M,r,r̃)*fΠ(M,r,r̃)
-    fρ(M,r,r̃) = 0.
-    fSr(M,r,r̃) = 0.
+    fρ(M,r) = ( fΠ(M,r)^2 + fψr(M,r)^2/fγrr(M,r) + m^2*f𝜙(M,r)^2 )/2.
+    fSr(M,r) = fψr(M,r)*fΠ(M,r)
+    # fρ(M,r,r̃) = 0.
+    # fSr(M,r,r̃) = 0.
 
-    f∂r̃M(M,r,r̃) = 4*pi*r(r̃)^2*(fρ(M,r,r̃) - fβʳ(M,r,r̃)*fSr(M,r,r̃)/fα(M,r,r̃))*drdr̃(r̃)
-    f∂ₜγrr(M,r,r̃) = -8*pi*r(r̃)*fSr(M,r,r̃)/fα(M,r,r̃)
-    f∂ₜγθθ(M,r,r̃) = 0.
+    f∂rM(M,r) = 4*pi*r^2*(fρ(M,r) - fβʳ(M,r)*fSr(M,r)/fα(M,r))
+    f∂ₜγrr(M,r) = -8*pi*r*fSr(M,r)/fα(M,r)
+    f∂ₜγθθ(M,r) = 0.
 
-    f∂ₜγrri(M,r,r̃) = 0.
-    f∂ₜγθθi(M,r,r̃) = 0.
+    f∂ₜγrri(M,r) = 0.
+    f∂ₜγθθi(M,r) = 0.
 
-    # Constraint Equations
+    # Constraint Solver
 
-    function constraintSystem(M, param, r̃)
-        r = param.r
-        f∂r̃M(M,r,r̃)
+    function constraintSystem(M, param, r)
+        f∂rM(M,r)
     end
 
-    BVP = ODEProblem(constraintSystem, M0, r̃span, param)
-    Mass = solve(BVP, Tsit5(), abstol=1e-15, dt=dr̃, adaptive=false)
+    BVP = ODEProblem(constraintSystem, M0, rspan, param)
+    Mass = solve(BVP, Tsit5(), abstol=1e-15, dt=dr, adaptive=false)
 
-    global Mtot = Mass(r̃max)
-    M(r̃) = Mass(r̃)
+    global Mtot = Mass(rmax)
+    M(r) = Mass(r)
 
     println("")
     println(string("Total Mass: ",round(Mtot, digits=3)))
@@ -273,51 +260,50 @@ function init!(state::VarContainer{T}, param) where T
 
     # Sample the 'regular' values and derivatives,
     # which are used in the regularization process
-    sample!(γrri,   grid, r̃ -> fγrr(M0,r,r̃)                 )
-    sample!(γθθi,   grid, r̃ -> fγθθ(M0,r,r̃)                 )
-    sample!(Krri,   grid, r̃ -> fKrr(M0,f∂ₜγrri,r,r̃)          )
-    sample!(Kθθi,   grid, r̃ -> fKθθ(M0,f∂ₜγθθi,r,r̃)          )
-    sample!(frrri,  grid, r̃ -> ffrrr(M0,r,r̃)                )
-    sample!(frθθi,  grid, r̃ -> ffrθθ(M0,r,r̃)                )
-    sample!(𝜙i,     grid, r̃ -> f𝜙(M0,r,r̃)                   )
-    sample!(ψi,     grid, r̃ -> fψ(M0,r,r̃)                   )
-    sample!(Πi,     grid, r̃ -> fΠ(M0,r,r̃)                   )
+    sample!(γrri,   grid, r -> fγrr(M0,r)               )
+    sample!(γθθi,   grid, r -> fγθθ(M0,r)               )
+    sample!(Krri,   grid, r -> fKrr(M0,f∂ₜγrri,r)        )
+    sample!(Kθθi,   grid, r -> fKθθ(M0,f∂ₜγθθi,r)        )
+    sample!(frrri,  grid, r -> ffrrr(M0,r)              )
+    sample!(frθθi,  grid, r -> ffrθθ(M0,r)              )
+    sample!(𝜙i,     grid, r -> f𝜙(M0,r)                 )
+    sample!(ψri,    grid, r -> fψr(M0,r)                )
+    sample!(Πi,     grid, r -> fΠ(M0,r)                 )
 
-    sample!(∂ᵣγrr,  grid, r̃ -> f∂ᵣγrr(M0,r,r̃)               )
-    sample!(∂ᵣγθθ,  grid, r̃ -> f∂ᵣγθθ(M0,r,r̃)               )
-    sample!(∂ᵣKrr,  grid, r̃ -> f∂ᵣKrr(M0,f∂ₜγrri,r,r̃)        )
-    sample!(∂ᵣKθθ,  grid, r̃ -> f∂ᵣKθθ(M0,f∂ₜγθθi,r,r̃)        )
-    sample!(∂ᵣfrrr, grid, r̃ -> f∂ᵣfrrr(M0,r,r̃)              )
-    sample!(∂ᵣfrθθ, grid, r̃ -> f∂ᵣfrθθ(M0,r,r̃)              )
+    sample!(∂ᵣγrr,  grid, r -> f∂ᵣγrr(M0,r)             )
+    sample!(∂ᵣγθθ,  grid, r -> f∂ᵣγθθ(M0,r)             )
+    sample!(∂ᵣKrr,  grid, r -> f∂ᵣKrr(M0,f∂ₜγrri,r)      )
+    sample!(∂ᵣKθθ,  grid, r -> f∂ᵣKθθ(M0,f∂ₜγθθi,r)      )
+    sample!(∂ᵣfrrr, grid, r -> f∂ᵣfrrr(M0,r)            )
+    sample!(∂ᵣfrθθ, grid, r -> f∂ᵣfrθθ(M0,r)            )
 
     # Sample the state initial vector
-    sample!(γrr,    grid, r̃ -> fγrr(M,r,r̃)                  )
-    sample!(γθθ,    grid, r̃ -> fγθθ(M,r,r̃)                  )
-    sample!(Krr,    grid, r̃ -> fKrr(M,f∂ₜγrr,r,r̃)            )
-    sample!(Kθθ,    grid, r̃ -> fKθθ(M,f∂ₜγθθ,r,r̃)            )
-    sample!(frrr,   grid, r̃ -> ffrrr(M,r,r̃)                 )
-    sample!(frθθ,   grid, r̃ -> ffrθθ(M,r,r̃)                 )
-    sample!(𝜙,      grid, r̃ -> f𝜙(M,r,r̃)                    )
-    sample!(ψ,      grid, r̃ -> fψ(M,r,r̃)                    )
-    sample!(Π,      grid, r̃ -> fΠ(M,r,r̃)                    )
+    sample!(γrr,    grid, r -> fγrr(M,r)                )
+    sample!(γθθ,    grid, r -> fγθθ(M,r)                )
+    sample!(Krr,    grid, r -> fKrr(M,f∂ₜγrr,r)          )
+    sample!(Kθθ,    grid, r -> fKθθ(M,f∂ₜγθθ,r)          )
+    sample!(frrr,   grid, r -> ffrrr(M,r)               )
+    sample!(frθθ,   grid, r -> ffrθθ(M,r)               )
+    sample!(𝜙,      grid, r -> f𝜙(M,r)                  )
+    sample!(ψr,     grid, r -> fψr(M,r)                 )
+    sample!(Π,      grid, r -> fΠ(M,r)                  )
 
-    Mg(r̃) = M(r̃)
     # Sample the gauge variables
-    sample!(ᾶ,      grid, r̃ -> fᾶ(Mg,r,r̃)                  )
-    sample!(βʳ,     grid, r̃ -> fβʳ(Mg,r,r̃)                 )
-    sample!(∂ᵣᾶ,    grid, r̃ -> f∂r̃ᾶ(Mg,r,r̃)/drdr̃(r̃)        )
-    sample!(∂ᵣβʳ,   grid, r̃ -> f∂r̃βʳ(Mg,r,r̃)/drdr̃(r̃)       )
-    sample!(∂ᵣ2ᾶ,   grid, r̃ -> (f∂r̃2ᾶ(Mg,r,r̃) - d2rdr̃(r̃)*f∂r̃ᾶ(Mg,r,r̃)/drdr̃(r̃))/drdr̃(r̃)^2   )
-    sample!(∂ᵣ2βʳ,  grid, r̃ -> (f∂r̃2βʳ(Mg,r,r̃) - d2rdr̃(r̃)*f∂r̃βʳ(Mg,r,r̃)/drdr̃(r̃))/drdr̃(r̃)^2 )
+    sample!(ᾶ,      grid, r -> fᾶ(M,r)                  )
+    sample!(βʳ,     grid, r -> fβʳ(M,r)                 )
+    sample!(∂ᵣᾶ,    grid, r -> f∂ᵣᾶ(M,r)                )
+    sample!(∂ᵣβʳ,   grid, r -> f∂ᵣβʳ(M,r)               )
+    sample!(∂ᵣ2ᾶ,   grid, r -> f∂ᵣ2ᾶ(M,r)               )
+    sample!(∂ᵣ2βʳ,  grid, r -> f∂ᵣ2βʳ(M,r)            )
 
-    sample!(cp,    grid, r̃ -> fcp(Mg,r,r̃)                  )
-    sample!(cm,    grid, r̃ -> fcm(Mg,r,r̃)                  )
-    sample!(∂ᵣcp,  grid, r̃ -> f∂r̃cp(Mg,r,r̃)/drdr̃(r̃)        )
-    sample!(∂ᵣcm,  grid, r̃ -> f∂r̃cm(Mg,r,r̃)/drdr̃(r̃)        )
-    sample!(∂ᵣ2cp, grid, r̃ -> (f∂r̃2cp(Mg,r,r̃) - d2rdr̃(r̃)*f∂r̃cp(Mg,r,r̃)/drdr̃(r̃))/drdr̃(r̃)^2 )
-    sample!(∂ᵣ2cm, grid, r̃ -> (f∂r̃2cm(Mg,r,r̃) - d2rdr̃(r̃)*f∂r̃cm(Mg,r,r̃)/drdr̃(r̃))/drdr̃(r̃)^2 )
+    sample!(cp,    grid, r -> fcp(M,r)                 )
+    sample!(cm,    grid, r -> fcm(M,r)                 )
+    sample!(∂ᵣcp,  grid, r -> f∂ᵣcp(M,r)               )
+    sample!(∂ᵣcm,  grid, r -> f∂ᵣcm(M,r)               )
+    sample!(∂ᵣ2cp, grid, r -> f∂ᵣ2cp(M,r)              )
+    sample!(∂ᵣ2cm, grid, r -> f∂ᵣ2cm(M,r)              )
 
-    # Sample initial values of the characteristics
+    # Sample initial values of the r characteristics
 
     global Upri = @part 1 Krr + frrr/sqrt(γrr)
     global Umri = @part n Krr - frrr/sqrt(γrr)
@@ -337,6 +323,8 @@ function init!(state::VarContainer{T}, param) where T
             end
         end
     end
+
+    rhs!(param.dtstate, state, param, 0.)
 
 end
 
@@ -363,13 +351,8 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # Unpack the parameters
 
     grid = param.grid
-    r = param.rsamp
-    drdr̃ = param.drdr̃samp
-    d2rdr̃ = param.d2rdr̃samp
-    r̃min = param.r̃min
-    r̃max = param.r̃max
-
-    fr = param.r
+    rmin = grid.domain.rmin
+    rmax = grid.domain.rmax
 
     state = param.state
     drstate = param.drstate
@@ -380,7 +363,6 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     init_drstate = param.init_drstate
     gauge = param.gauge
     speeds = param.speeds
-    Dr = param.Dr
 
     # Copy the state into the parameters so that it can be changed
 
@@ -398,50 +380,46 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     # Give names to individual variables
 
-    γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,ψ,Π = state.x
-    ∂ᵣγrr,∂ᵣγθθ,∂ᵣKrr,∂ᵣKθθ,∂ᵣfrrr,∂ᵣfrθθ,∂ᵣ𝜙,∇ᵣψ,∂ᵣΠ = drstate.x
-    ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψ,∂ₜΠ = dtstate.x
+    γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,ψr,Π = state.x
+    ∂ᵣγrr,∂ᵣγθθ,∂ᵣKrr,∂ᵣKθθ,∂ᵣfrrr,∂ᵣfrθθ,∂ᵣ𝜙,∂ᵣψr,∂ᵣΠ = drstate.x
+    ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψr,∂ₜΠ = dtstate.x
     ᾶ,βʳ,∂ᵣᾶ,∂ᵣβʳ,∂ᵣ2ᾶ,∂ᵣ2βʳ,α,∂ᵣlnᾶ,∂ᵣ2lnᾶ = gauge.x
     cp,cm,∂ᵣcp,∂ᵣcm,∂ᵣ2cp,∂ᵣ2cm,∂ᵣ3cp,∂ᵣ4cp,∂ᵣ5cp = speeds.x
 
-    γrri,γθθi,Krri,Kθθi,frrri,frθθi,𝜙i,ψi,Πi = init_state.x
-    ∂ᵣγrri,∂ᵣγθθi,∂ᵣKrri,∂ᵣKθθi,∂ᵣfrrri,∂ᵣfrθθi,∂ᵣ𝜙i,∂ᵣψi,∂ᵣΠi = init_drstate.x
+    γrri,γθθi,Krri,Kθθi,frrri,frθθi,𝜙i,ψri,Πi = init_state.x
+    ∂ᵣγrri,∂ᵣγθθi,∂ᵣKrri,∂ᵣKθθi,∂ᵣfrrri,∂ᵣfrθθi,∂ᵣ𝜙i,∂ᵣψri,∂ᵣΠi = init_drstate.x
+
+    ∇ᵣψr = temp.x[1]; ∇ᵣfrrr = temp.x[2]; ∇ᵣfrθθ = temp.x[3];
 
     # Calculate first spatial derivatives by multipling D operator
     # and convert between the computational r̃ coordinate
     # and the traditional r coordinate
 
-    Dr .= spdiagm(1. ./(sqrt.(γrr).*γθθ))*D*spdiagm(sqrt.(γrr).*γθθ)
-
     for i in 1:numvar
         mul!(drstate.x[i],D,state.x[i])
-        @. drstate.x[i] /= drdr̃
     end
-
-    # mul!(∂ᵣfrrr,Dr,frrr)
-    # mul!(∂ᵣfrθθ,Dr,frθθ)
-    mul!(∇ᵣψ,Dr,ψ)
 
     # Convert between regularized variables and cannonical variables
 
-    reg = temp.x[1]; ∂reg = temp.x[2];
-
     for i in reg_list
-        @. reg = state.x[i]; @. ∂reg = drstate.x[i];
         @. state.x[i] *= init_state.x[i]
-        @. drstate.x[i] = (init_state.x[i]*∂reg
-              + init_drstate.x[i]*reg )
+        @. drstate.x[i] = (init_state.x[i]*drstate.x[i]
+              + init_drstate.x[i]*state.x[i] )
     end
+
+    ∇ᵣψr   .= (D*(sqrt.(γrr).*γθθ.*ψr  ))./(sqrt.(γrr).*γθθ)
+    ∇ᵣfrrr .= (D*(sqrt.(γrr).*γθθ.*frrr))./(sqrt.(γrr).*γθθ)
+    ∇ᵣfrθθ .= (D*(sqrt.(γrr).*γθθ.*frθθ))./(sqrt.(γrr).*γθθ)
 
     # Source terms to GR
 
-    ρ = temp.x[5]; Sr = temp.x[6]; Tt = temp.x[7]; Srr = temp.x[8]; Sθθ = temp.x[9];
+    ρ = temp.x[4]; Sr = temp.x[5]; Tt = temp.x[6]; Srr = temp.x[7]; Sθθ = temp.x[8];
 
-    @. ρ = ( Π^2 + ψ^2/γrr + (m^2)*𝜙^2)/2 # Energy Density
-    @. Sr = ψ*Π  # Momentum Density
-    @. Tt = Π^2 - ψ^2/γrr - 2*(m^2)*𝜙^2  # Trace of the Stress-Energy tensor (T unavailable)
-    @. Srr = γrr*( Π^2 + ψ^2/γrr - (m^2)*𝜙^2)/2  # Radial pressure component
-    @. Sθθ = γθθ*( Π^2 - ψ^2/γrr - (m^2)*𝜙^2)/2  # Angular pressure component
+    @. ρ = ( Π^2 + ψr^2/γrr + (m^2)*𝜙^2)/2 # Energy Density
+    @. Sr = ψr*Π  # Momentum Density
+    @. Tt = Π^2 - ψr^2/γrr - 2*(m^2)*𝜙^2  # Trace of the Stress-Energy tensor (T unavailable)
+    @. Srr = γrr*( Π^2 + ψr^2/γrr - (m^2)*𝜙^2)/2  # Radial pressure component
+    @. Sθθ = γθθ*( Π^2 - ψr^2/γrr - (m^2)*𝜙^2)/2  # Angular pressure component
 
     # Calculated lapse and derivatives of densitized lapse
 
@@ -473,12 +451,12 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     @. ∂ₜγθθ = βʳ*∂ᵣγθθ - 2*α*Kθθ
 
-    @. ∂ₜKrr  = ( βʳ*∂ᵣKrr - α*∂ᵣfrrr/γrr + 2*α*frrr^2/γrr^2 - 6*α*frθθ^2/γθθ^2
-     - α*Krr^2/γrr + 2*α*Krr*Kθθ/γθθ - 8*α*frrr*frθθ/(γrr*γθθ)
+    @. ∂ₜKrr  = ( βʳ*∂ᵣKrr - α*∇ᵣfrrr/γrr + 3*α*frrr^2/γrr^2 - 6*α*frθθ^2/γθθ^2
+     - α*Krr^2/γrr + 2*α*Krr*Kθθ/γθθ - 10*α*frrr*frθθ/(γrr*γθθ)
      - α*frrr*∂ᵣlnᾶ/γrr - α*∂ᵣlnᾶ^2 - α*∂ᵣ2lnᾶ + 2*∂ᵣβʳ*Krr)
 
-    @. ∂ₜKθθ  = ( βʳ*∂ᵣKθθ - α*∂ᵣfrθθ/γrr + α + α*Krr*Kθθ/γrr
-     - 2*α*frθθ^2/(γrr*γθθ) - α*frθθ*∂ᵣlnᾶ/γrr)
+    @. ∂ₜKθθ  = ( βʳ*∂ᵣKθθ - α*∇ᵣfrθθ/γrr + α + α*Krr*Kθθ/γrr
+     + α*frrr*frθθ/γrr^2 - 4*α*frθθ^2/(γrr*γθθ) - α*frθθ*∂ᵣlnᾶ/γrr)
 
     @. ∂ₜfrrr = ( βʳ*∂ᵣfrrr - α*∂ᵣKrr - α*frrr*Krr/γrr
      + 12*α*frθθ*Kθθ*γrr/γθθ^2 - 10*α*frθθ*Krr/γθθ - 4*α*frrr*Kθθ/γθθ
@@ -489,17 +467,12 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     # Klein-Gordon System
 
-    @. ∂ₜ𝜙 =   βʳ*∂ᵣ𝜙 - α*Π
+    @. ∂ₜ𝜙 = βʳ*∂ᵣ𝜙 - α*Π
 
-    @. ∂ₜψ = ( βʳ*∇ᵣψ - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣlnᾶ)*Π
-    - (βʳ*frrr/γrr - 2*βʳ*frθθ/γθθ - ∂ᵣβʳ)*ψ )
+    @. ∂ₜψr =  βʳ*∂ᵣψr - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣlnᾶ)*Π + ∂ᵣβʳ*ψr
 
-    @. ∂ₜΠ = ( βʳ*∂ᵣΠ - α*∇ᵣψ/γrr + α*(Krr/γrr + 2*Kθθ/γθθ)*Π
-    + α*(frrr/γrr - 6*frθθ/γθθ - ∂ᵣlnᾶ)*ψ/γrr + m^2*α*𝜙 )
-
-    # @. ∂ₜψ =   βʳ*∂ᵣψ - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣlnᾶ)*Π + ψ*∂ᵣβʳ
-    # @. ∂ₜΠ = ( βʳ*∂ᵣΠ - α*∂ᵣψ/γrr + α*(Krr/γrr + 2*Kθθ/γθθ)*Π
-    #  - α*(4*frθθ/γθθ + ∂ᵣlnᾶ)*ψ/γrr + m^2*α*𝜙 )
+    @. ∂ₜΠ = ( βʳ*∂ᵣΠ - α*∇ᵣψr/γrr + α*(Krr/γrr + 2*Kθθ/γθθ)*Π
+    + α*(frrr/γrr - 6*frθθ/γθθ - ∂ᵣlnᾶ)*ψr/γrr + m^2*α*𝜙 )
 
     # Source terms to GR
 
@@ -515,9 +488,6 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     is_AH = false
     for i in 1:n-1 if AH[i]*AH[i+1] <= 0. is_AH = true; break; end end
 
-    # s1 = 0.5 /(dr̃*Σ[1,1]*sqrt(γrr[1])*γθθ[1])
-    # sn = 0.5 /(dr̃*Σ[n,n]*sqrt(γrr[n])*γθθ[n])
-
     if !(is_AH)
 
         ## Apply Inner Boundary Conditions
@@ -528,19 +498,19 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         Umr = @part 1 ( Krr - frrr/sqrt(γrr) )
         Upr = @part 1 ( Krr + frrr/sqrt(γrr) )
 
-        Up𝜙   = @part 1 ( Π + ψ/sqrt(γrr) )
-        Um𝜙   = @part 1 ( Π - ψ/sqrt(γrr) )
+        Up𝜙   = @part 1 ( Π + ψr/sqrt(γrr) )
+        Um𝜙   = @part 1 ( Π - ψr/sqrt(γrr) )
 
 
         Upθb = @part 1 ((2*M0*sqrt(γθθ) - γθθ)/Umθ)
 
         #Dirichlet on scalar
-        #Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
+        Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
         # #Neumann on scalar
         #Up𝜙b = @part 1 sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
 
         # Static Dirichlet
-        Up𝜙b = @part 1 (cm/cp)*Um𝜙
+        #Up𝜙b = @part 1 (cm/cp)*Um𝜙
 
         # ∂ᵣUmθ = @part 1 ∂ᵣKθθ - ∂ᵣfrθθ/sqrt(γrr) + frθθ*(2*frrr - 8*frθθ*γrr/γθθ)/(2*sqrt(γrr)^3)
         #Uprb = @part 1 (-Umr - γrr*Umθ/γθθ - (2*∂ᵣUmθ*sqrt(γrr) + γrr)/Umθ )
@@ -560,12 +530,12 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         #Uprb = @part 1 (cm/cp)*(Umr-(Krri - frrri/sqrt(γrri))) + Krri + frrri/sqrt(γrri)
 
         # ∂ₜΠ[1] = 0
-        # ∂ₜψ[1] += s*(-Π[1])/(dr̃*Σ[1,1])/2.
+        # ∂ₜψr[1] += s*(-Π[1])/(dr̃*Σ[1,1])/2.
 
         s1 = abs(cp[1])/Σ[1,1]
 
         ∂ₜΠ[1] += s1*(Up𝜙b - Up𝜙)/2.
-        ∂ₜψ[1] += s1*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/2.
+        ∂ₜψr[1] += s1*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/2.
 
         ∂ₜKrr[1]  += s1*(Uprb - Upr)/2.
         ∂ₜfrrr[1] += s1*sqrt(γrr[1])*(Uprb - Upr)/2.
@@ -583,8 +553,8 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     Umr = @part n ( Krr - frrr/sqrt(γrr) )
     Upr = @part n ( Krr + frrr/sqrt(γrr) )
 
-    Up𝜙 = @part n ( Π + ψ/sqrt(γrr) )
-    Um𝜙 = @part n ( Π - ψ/sqrt(γrr) )
+    Up𝜙 = @part n ( Π + ψr/sqrt(γrr) )
+    Um𝜙 = @part n ( Π - ψr/sqrt(γrr) )
 
     # # Transmitting conditions
     #
@@ -600,10 +570,10 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     #Dirichlet on scalar
     #Um𝜙b = @part n -sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
     # #Neumann on scalar
-    # Up𝜙b = @part 1 sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
+    Um𝜙b = @part n sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
 
     # Static Neumann
-    Um𝜙b = @part n -(cp/cm)*Up𝜙
+    #Um𝜙b = @part n -(cp/cm)*Up𝜙
 
     Umrb = Umri
 
@@ -615,12 +585,12 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     @part n ∂ₜγrr = ( (2*frrr - 8*frθθ*γrr/γθθ)*βʳ + 2*∂ᵣβʳ*γrr - 2*α*Krr )
     @part n ∂ₜγθθ = ( 2*frθθ*βʳ - 2*α*Kθθ )
     #@part n ∂ₜγθθ = sqrt(γrr)*(cm*Umθb-cp*Upθ)
-    @part n ∂ₜ𝜙   = (βʳ*ψ - α*Π)
+    @part n ∂ₜ𝜙   = (βʳ*ψr - α*Π)
 
     sn = abs(cm[n])/Σ[n,n]
 
     ∂ₜΠ[n] += sn*(Um𝜙b - Um𝜙)/2.
-    ∂ₜψ[n] += -sn*sqrt(γrr[n])*(Um𝜙b - Um𝜙)/2.
+    ∂ₜψr[n] += -sn*sqrt(γrr[n])*(Um𝜙b - Um𝜙)/2.
 
     ∂ₜKrr[n]  += sn*(Umrb - Umr)/2.
     ∂ₜfrrr[n] += -sn*sqrt(γrr[n])*(Umrb - Umr)/2.
@@ -628,30 +598,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     ∂ₜKθθ[n]  += sn*(Umθb - Umθ)/2.
     ∂ₜfrθθ[n] += -sn*sqrt(γrr[n])*(Umθb - Umθ)/2.
 
-    # γrrrhs = ∂ₜγrr[n]; γθθrhs = ∂ₜγθθ[n];
-    # Krrrhs = ∂ₜKrr[n]; frrrrhs = ∂ₜfrrr[n];
-    # Kθθrhs = ∂ₜKθθ[n]; frθθrhs = ∂ₜfrθθ[n];
-    #
-    # ∂ₜU0r = ∂ₜγrr[n]
-    # ∂ₜUmr = 0.
-    #
-    # @part n ∂ₜKrr  = ∂ₜUmr/2 + Krrrhs/2 + frrrrhs/sqrt(γrr)/2 - frrr*γrrrhs/4/sqrt(γrr)^3
-    # @part n ∂ₜfrrr = (frrrrhs/2 - ∂ₜUmr*sqrt(γrr)/2 + Krrrhs*sqrt(γrr)/2
-    #  - frrr*γrrrhs/4/γrr + frrr*∂ₜU0r/2/γrr)
-    #
-    # ∂ᵣUmθ = @part n ( -(Umr + Upr)*Umθ/2/sqrt(γrr) - (1. + Umθ^2/γθθ)*sqrt(γrr)/2
-    #     + 4*pi*sqrt(γrr)*γθθ*(ρ - Sr/sqrt(γrr)) )
-    #
-    # ∂ₜUmθ = @part n ( α - (-βʳ - α/sqrt(γrr))*∂ᵣUmθ + Upr*Umθ*α/γrr
-    #     - (Upθ - Umθ)*Umθ*α/γθθ + α*∂ᵣlnᾶ*Umθ/sqrt(γrr) + 4*pi*α*(γθθ*Tt - 2*Sθθ) )
-    #
-    # @part n ∂ₜKθθ  = ∂ₜUmθ/2 + Kθθrhs/2 + frθθrhs/sqrt(γrr)/2 - frθθ*γrrrhs/4/sqrt(γrr)^3
-    # @part n ∂ₜfrθθ = (frθθrhs/2 - ∂ₜUmθ*sqrt(γrr)/2 + Kθθrhs*sqrt(γrr)/2
-    #  - frθθ*γrrrhs/γrr/4 + frθθ*∂ₜU0r/γrr/2)
-
-    for i in 1:6
-        @. dtstate.x[i] = 0.
-    end
+    # for i in 1:6
+    #     @. dtstate.x[i] = 0.
+    # end
 
     # Store the calculated state into the param
     # so that we can print it to the screen
@@ -668,10 +617,10 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     # Add the numerical dissipation to regularized dtstate
 
-    # for i in 7:numvar
-    #     mul!(dtstate.x[i],A,regstate.x[i],1.,1.)
-    #     # this syntax is equivalent to dtstate.x[i] .+= A4*regstate.x[i]
-    # end
+    for i in 1:numvar
+        mul!(dtstate.x[i],D4,regstate.x[i],1.,1.)
+        # this syntax is equivalent to dtstate.x[i] .+= D4*regstate.x[i]
+    end
 
     # catch any errors, save them to print later
     catch e
@@ -718,44 +667,32 @@ function constraints(regstate::VarContainer{T},param) where T
         state.x[i] .= regstate.x[i]
     end
 
-    γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,ψ,Π = state.x
-    ∂ᵣγrr,∂ᵣγθθ,∂ᵣKrr,∂ᵣKθθ,∂ᵣfrrr,∂ᵣfrθθ,∂ᵣ𝜙,∂ᵣψ,∂ᵣΠ = drstate.x
-    ᾶ,βʳ,∂ᵣᾶ,∂ᵣβʳ,∂ᵣ2ᾶ,∂ᵣ2βʳ,∂ᵣ3βʳ,∂ᵣ4βʳ,∂ᵣ5βʳ = gauge.x
+    γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,ψr,Π = state.x
+    ∂ᵣγrr,∂ᵣγθθ,∂ᵣKrr,∂ᵣKθθ,∂ᵣfrrr,∂ᵣfrθθ,∂ᵣ𝜙,∂ᵣψr,∂ᵣΠ = drstate.x
+    ᾶ,βʳ,∂ᵣᾶ,∂ᵣβʳ,∂ᵣ2ᾶ,∂ᵣ2βʳ,α,∂ᵣlnᾶ,∂ᵣ2lnᾶ = gauge.x
 
     init_state = param.init_state
     init_drstate = param.init_drstate
 
-    r = param.rsamp
-    drdr̃ = param.drdr̃samp
-    d2rdr̃ = param.d2rdr̃samp
     temp = param.temp
     grid = param.grid
-    Dr = param.Dr
-
-    # for i in reg_list
-    #     @. state.x[i] /= init_state.x[i]
-    # end
 
     for i in 1:numvar
         mul!(drstate.x[i],D,state.x[i])
-        @. drstate.x[i] /= drdr̃
     end
-
-    reg = temp.x[1]; ∂reg = temp.x[2];
 
     for i in reg_list
-        @. reg = state.x[i]; @. ∂reg = drstate.x[i];
         @. state.x[i] *= init_state.x[i]
-        @. drstate.x[i] = (init_state.x[i]*∂reg
-              + init_drstate.x[i]*reg )
+        @. drstate.x[i] = (init_state.x[i]*drstate.x[i]
+              + init_drstate.x[i]*state.x[i] )
     end
 
-    α = temp.x[3]; ρ = temp.x[4]; Sr = temp.x[5]
+    ρ = temp.x[1]; Sr = temp.x[2]
 
     @. α = ᾶ*γθθ*sqrt(γrr)
-    @. ρ = (Π^2 + ψ^2/γrr + (m^2)*𝜙^2)/2.
+    @. ρ = (Π^2 + ψr^2/γrr + (m^2)*𝜙^2)/2.
     #Lower Index
-    @. Sr = ψ*Π
+    @. Sr = ψr*Π
 
     # Constraint Equations
 
@@ -771,37 +708,24 @@ function constraints(regstate::VarContainer{T},param) where T
 
     @. Crθθ = ∂ᵣγθθ - 2*frθθ
 
-    @. C𝜙 = ∂ᵣ𝜙 - ψ
+    @. C𝜙 = ∂ᵣ𝜙 - ψr
 
-    #E = dr̃*(Krr')*Σ*(D*𝜙) + dr̃*(𝜙')*Σ*(D*Krr) - (Krr[n]*𝜙[n]-Krr[1]*𝜙[1])
+    Γ = spdiagm(sqrt.(γrr).*γθθ)
+    W = Σ*Γ;
 
-    #E  = dr̃*sum(Σ*( @. (α*ρ - βʳ*Sr)*4*pi*sqrt(γrr)*γθθ*drdr̃))
+    #E = (α.*Π)'*W*Π/2. +  (α.*ψr./γrr)'*W*ψr/2. - (βʳ.*Π)'*W*ψr
 
-    # E  = dr̃*(Π')*Σ*spdiagm(@. sqrt(γrr)*γθθ)*(@. α*Π/2.)
-    #    + dr̃*(ψ')*Σ*spdiagm(@. sqrt(γrr)*γθθ)*(@. α*ψ/γrr/2.)
-    #    - dr̃*(Π')*Σ*spdiagm(@. sqrt(γrr)*γθθ)*(@. βʳ*ψ/α )
-    rootγ = spdiagm(sqrt.(γrr).*γθθ)
-    invrootγ = spdiagm(1. ./(sqrt.(γrr).*γθθ))
-    Dr .= invrootγ*D*rootγ
-    Wv = Σ*rootγ; Ws = rootγ*Σ;
-    Bvec1 = zeros(T,n); Bvec1[1] = -1.; Bvec1[n] = 1.;
-    B = spdiagm(Bvec1);
-    #println((dr̃*Wv*Dr + dr̃*(Ws*D)' + B*rootγ)[1:6,1:6])
-    #println((Σ*D + (Σ*D)' - B)[1:6,1:6])
-    #println((dr̃*Wg*Dr + dr̃*(D')*Wg + B*rootγ)[1:6,1:6])
-
-    #E  = dr̃*( Π'*Wv*(Dr*ψ) + (D*Π)'*Ws*ψ ) #check
-    #E  = (Π'*Wv*Π +  ψ'*Wv*ψ )
-    E = (α.*Π)'*Wv*Π/2. +  (α.*ψ./γrr)'*Wv*ψ/2. - (βʳ.*Π)'*Wv*ψ
+    E = (frθθ.*sqrt.(γθθ))'*Σ*ρ - (Kθθ.*sqrt.(γθθ))'*Σ*Sr
 
     #E  = dr̃*sum(Σ*( @. (frθθ*ρ - Kθθ*Sr)*4*pi*sqrt(γθθ)*drdr̃ ) )
-    Ec = dr̃*sum(Σ*( @. (C^2 + Cr^2/γrr)*4*pi*sqrt(γrr)*γθθ*drdr̃ ))
+
+    Ec = (α.*C)'*W*C/2. +  (α.*Cr./γrr)'*W*Cr/2. - (βʳ.*C)'*W*Cr
 
     return [C, Cr, Crrr, Crθθ, C𝜙, E, Ec]
 
 end
 
-function custom_progress_message(dt,state::VarContainer{T},param,t) where T
+function continuous_print(dt,state::VarContainer{T},param,t) where T
 
     ###############################################
     # Outputs status numbers while the program runs
@@ -809,7 +733,7 @@ function custom_progress_message(dt,state::VarContainer{T},param,t) where T
 
     dtstate = param.dtstate::VarContainer{T}
 
-    ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψ,∂ₜΠ = dtstate.x
+    ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψr,∂ₜΠ = dtstate.x
 
     println("  ",
     rpad(string(round(t,digits=1)),10," "),
@@ -826,7 +750,7 @@ function custom_progress_message(dt,state::VarContainer{T},param,t) where T
 end
 
 
-function solution_saver(T,grid,sol,param)
+function solution_saver(T,sol,param)
 
     ###############################################
     # Saves all of the variables in nice CSV files
@@ -834,7 +758,7 @@ function solution_saver(T,grid,sol,param)
     ###############################################
 
     folder = string("n=",      n,
-                    "_rspan=", round.(r̃span, digits=2),
+                    "_rspan=", round.(rspan, digits=2),
                     "_tspan=", round.(tspan, digits=2),
                     "_CFL=",   round(CFL, digits=2),
                     "_Mtot=",  round(Mtot, digits=2)
@@ -849,30 +773,27 @@ function solution_saver(T,grid,sol,param)
         rm(old_files[i])
     end
 
+    # Windows apparently doesn't support non-ASCII characters
+    # in HDF5 file names, or at least not when imported with Mathematica...
+    
     vars = (["grr","gtt","Krr","Ktt","frrr","frtt","phi","psi","Pi",
-    #"∂ₜγrr","∂ₜγθθ","∂ₜKrr","∂ₜKθθ","∂ₜfrrr","∂ₜfrθθ","∂ₜ𝜙","∂ₜψ","∂ₜΠ",
+    #"∂ₜγrr","∂ₜγθθ","∂ₜKrr","∂ₜKθθ","∂ₜfrrr","∂ₜfrθθ","∂ₜ𝜙","∂ₜψr","∂ₜΠ",
     "C","Cr","Crrr","Crtt","Cphi","E","Ec"])
 
-    # vars = (["γrr","γθθ","Krr","Kθθ","frrr","frθθ","𝜙","ψ","Π",
-    # #"∂ₜγrr","∂ₜγθθ","∂ₜKrr","∂ₜKθθ","∂ₜfrrr","∂ₜfrθθ","∂ₜ𝜙","∂ₜψ","∂ₜΠ",
-    # "H","Mr","Crrr","Crθθ","C𝜙","E","Ec"])
     varlen = length(vars)
     tlen = size(sol)[2]
-    rlen = grid.ncells
-    r = param.rsamp
-    r̃min = param.r̃min
+    grid = param.grid
 
     init_state = param.init_state
     init_drstate = param.init_drstate
 
     #dtstate = [rhs_all(sol[i],param,0.) for i = 1:tlen]
 
-
     cons = [constraints(sol[i],param) for i = 1:tlen]
 
-    # ens = [energies(sol[i],param) for i = 1:tlen]
+    array = Array{T,2}(undef,tlen,n)
 
-    array = Array{T,2}(undef,tlen,rlen)
+    r = zeros(T,n); sample!(r, grid, r -> r );
 
     save(string(path,"/coords.h5"), Dict("r"=>r,"t"=>sol.t[:]) )
 
@@ -892,32 +813,6 @@ function solution_saver(T,grid,sol,param)
 
     end
 
-    # for j = 1:numvar
-    #
-    #     if j in reg_list
-    #         for i = 2:tlen+1
-    #             array[i,1] = sol.t[i-1]
-    #             @. array[i,2:end] = dtstate[i-1].x[j]*init_state.x[j]
-    #         end
-    #     else
-    #         for i = 2:tlen+1
-    #             array[i,1] = sol.t[i-1]
-    #             @. array[i,2:end] = dtstate[i-1].x[j]
-    #         end
-    #     end
-    #
-    #     CSV.write(
-    #         string(path,"/",vars[j+numvar],".csv"),
-    #         DataFrame(array, :auto),
-    #         header=false
-    #     )
-    #
-    # end
-    # println(length(cons))
-    # println(size(cons[:][1]))
-    # println(size(array[1,:]))
-    # return
-
     for j = 1:5
         for i = 1:tlen @. array[i,:] = cons[i][j] end
         save(string(path,"/",vars[j+numvar],".h5"), Dict(vars[j+numvar]=>array ) )
@@ -930,18 +825,6 @@ function solution_saver(T,grid,sol,param)
 
     println("")
     println("Saved at ", path)
-
-    # for i = 2:tlen+1
-    #     array[i,1] = sol.t[i-1]
-    #     array[i,2] = cons[i-1][4]
-    #     array[i,3:end] .= 0
-    # end
-    #
-    # CSV.write(
-    # string("data/",folder,"/","E-",r̃min,".csv"),
-    # DataFrame(array, :auto),
-    # header=false
-    # )
 
 end
 
@@ -965,8 +848,64 @@ function error_handler(regstate,t,integrator)
 end
 
 # Terminates the integrator when error_handler returns true
-cb = DiscreteCallback(error_handler,terminate!,save_positions=(false,false))
+error_cb = DiscreteCallback(error_handler,terminate!,save_positions=(false,false))
 
+
+function print_times(regstate,t,integrator)
+    t in tspan[1]:print_interval:tspan[2]
+end
+
+function continuous_print(integrator)
+
+    ###############################################
+    # Outputs status numbers while the program runs
+    ###############################################
+
+    dtstate = integrator.p.dtstate
+
+    ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψr,∂ₜΠ = dtstate.x
+
+    println("| ",
+    rpad(string(round(integrator.t,digits=1)),5," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜγrr)), digits=3)),8," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜγθθ)), digits=3)),8," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜKrr)), digits=3)),8," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜKθθ)), digits=3)),8," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜfrrr)),digits=3)),9," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜfrθθ)),digits=3)),9," "),"|"
+    )
+
+    return
+
+end
+
+function initial_print(param::Param)
+
+    ###############################################
+    # Outputs initial status numbers
+    ###############################################
+
+    dtstate = param.dtstate
+
+    ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψr,∂ₜΠ = dtstate.x
+
+    println("| ",
+    rpad(0.0,5," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜγrr)), digits=3)),8," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜγθθ)), digits=3)),8," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜKrr)), digits=3)),8," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜKθθ)), digits=3)),8," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜfrrr)),digits=3)),9," "),"|   ",
+    rpad(string(round(maximum(abs.(∂ₜfrθθ)),digits=3)),9," "),"|"
+    )
+
+    return
+
+end
+
+print_cb = DiscreteCallback(print_times,continuous_print,save_positions=(false,false))
+
+cb = CallbackSet(error_cb,print_cb)
 
 function main()
 
@@ -975,22 +914,19 @@ function main()
     #
     # Calls each of the above functions to run a
     # simulation. Sets up the numerical grid,
-    # sets the gauge conditions, sets up a new
-    # computational r̃ coordinate that makes the
-    # physical r coordinate step larger near the
-    # outer boundary, sets the initial conditions,
+    # sets the gauge conditions, sets the 
+    # initial conditions,
     # and finally runs the numerical DiffEq
     # package to run the time integration.
     #
     # All data is saved in the folder specified to
-    # the solution_saver, each in their own CSV
+    # the solution_saver, each in their own HDF5
     # file.
     ###############################################
 
-    r̃min, r̃max = r̃span
-    rspan = T[r̃min,r̃max]
+    rmin, rmax = rspan
 
-    domain = Domain{T}(r̃min, r̃max)
+    domain = Domain{T}(rmin, rmax)
     grid = Grid(domain, n)
 
     tmin, tmax = tspan
@@ -1002,8 +938,8 @@ function main()
 
     #printlogo()
 
-    custom_progress_step = round(Int64, printtimes/dt)
-    step_iterator = custom_progress_step
+    # custom_progress_step = round(Int64, printtimes/dt)
+    # step_iterator = custom_progress_step
 
     regstate = similar(ArrayPartition,T,n)
 
@@ -1016,32 +952,17 @@ function main()
     gauge = similar(ArrayPartition,T,n)
     speeds = similar(ArrayPartition,T,n)
     dtstate = similar(ArrayPartition,T,n)
-    dissipation = similar(ArrayPartition,T,n)
     temp = similar(ArrayPartition,T,n)
 
     #println("Defining Problem...")
-    rsamp = similar(Vector{T}(undef,n))
-    drdr̃samp = similar(Vector{T}(undef,n))
-    d2rdr̃samp = similar(Vector{T}(undef,n))
-    #right_boundary = similar(Vector{T}(undef,numvar))
-
-    sample!(rsamp, grid, r̃ -> r(r̃) )
-    sample!(drdr̃samp, grid, r̃ -> drdr̃(r̃) )
-    sample!(d2rdr̃samp, grid, r̃ -> d2rdr̃(r̃) )
-
-    #return
 
     param = Param(
-    r̃min,r̃max,grid,
-    r,drdr̃,d2rdr̃,
-    rsamp,drdr̃samp,d2rdr̃samp,gauge,speeds,
+    grid,gauge,speeds,
     init_state,init_drstate,
     state,drstate,
-    dtstate,dissipation,temp,copy(D))
+    dtstate,temp)
 
     init!(regstate, param)
-
-    # return
 
     prob = ODEProblem(rhs!, regstate, tspan, param)
 
@@ -1049,23 +970,22 @@ function main()
     println("")
     println("| Time | max ∂ₜγrr | max ∂ₜγθθ | max ∂ₜKrr | max ∂ₜKθθ | max ∂ₜfrrr | max ∂ₜfrθθ |")
     println("|______|___________|___________|___________|___________|____________|____________|")
-    println("")
+    println("|      |           |           |           |           |            |            |")
 
+    initial_print(param)
 
     sol = solve(
         prob, alg,
         abstol = atol,
         dt = dt,
         adaptive = false,
-        saveat = savetimes,
+        saveat = save_interval,
         alias_u0 = true,
-        progress = true,
-        progress_steps = custom_progress_step,
-        progress_message = custom_progress_message,
+        tstops = [t for t in tspan[1]:print_interval:tspan[2]],
         callback = cb
     )
 
-    solution_saver(T,grid,sol,param)
+    solution_saver(T,sol,param)
 
     # Print error if one is encountered, with line of occurance
 
