@@ -229,10 +229,10 @@ function init!(state::VarContainer{T}, param) where T
     n = grid.ncells
     rspan = (rmin,rmax)
 
-    fρ(M,r) = ( fΠ(M,r)^2 + fψr(M,r)^2/fγrr(M,r) + m^2*f𝜙(M,r)^2 )/2.
-    fSr(M,r) = fψr(M,r)*fΠ(M,r)
-    # fρ(M,r,r̃) = 0.
-    # fSr(M,r,r̃) = 0.
+    # fρ(M,r) = ( fΠ(M,r)^2 + fψr(M,r)^2/fγrr(M,r) + m^2*f𝜙(M,r)^2 )/2.
+    # fSr(M,r) = fψr(M,r)*fΠ(M,r)
+    fρ(M,r) = 0.
+    fSr(M,r) = 0.
 
     f∂rM(M,r) = 4*pi*r^2*(fρ(M,r) - fβʳ(M,r)*fSr(M,r)/fα(M,r))
     f∂ₜγrr(M,r) = -8*pi*r*fSr(M,r)/fα(M,r)
@@ -305,8 +305,11 @@ function init!(state::VarContainer{T}, param) where T
 
     # Sample initial values of the r characteristics
 
-    global Upri = @part 1 Krr + frrr/sqrt(γrr)
-    global Umri = @part n Krr - frrr/sqrt(γrr)
+    global Upri1 = @part 1 Krr + frrr/sqrt(γrr)
+    global Umri1 = @part 1 Krr - frrr/sqrt(γrr)
+
+    global Uprin = @part n Krr + frrr/sqrt(γrr)
+    global Umrin = @part n Krr - frrr/sqrt(γrr)
 
     # add noise to initial values to assess stability with magnitude s
     s = 0*10^(-10)
@@ -505,17 +508,23 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         Upθb = @part 1 ((2*M0*sqrt(γθθ) - γθθ)/Umθ)
 
         #Dirichlet on scalar
-        Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
+        #Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
         # #Neumann on scalar
         #Up𝜙b = @part 1 sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
 
         # Static Dirichlet
-        #Up𝜙b = @part 1 (cm/cp)*Um𝜙
+        Up𝜙b = @part 1 (cm/cp)*Um𝜙
+
+        # Uprb = Upri
+
+        # Krr = Krri
+        Uprb = -(Umr - Umri1) + Upri1
+
+        # frrr = frrri
+        #Uprb = -(Umr - Umri) + Upri
 
         # ∂ᵣUmθ = @part 1 ∂ᵣKθθ - ∂ᵣfrθθ/sqrt(γrr) + frθθ*(2*frrr - 8*frθθ*γrr/γθθ)/(2*sqrt(γrr)^3)
         #Uprb = @part 1 (-Umr - γrr*Umθ/γθθ - (2*∂ᵣUmθ*sqrt(γrr) + γrr)/Umθ )
-
-        Uprb = Upri
 
         #∂ᵣUpθ = @part 1 ( ∂ᵣKθθ + ∂ᵣfrθθ/sqrt(γrr) - ∂ᵣγrr*frθθ/sqrt(γrr)^3/2 )
         #∂ᵣUmθ = @part n ( ∂ᵣKθθ - ∂ᵣfrθθ/sqrt(γrr) + ∂ᵣγrr*frθθ/sqrt(γrr)^3/2 )
@@ -529,8 +538,6 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         #Dirichlet on r-mode
         #Uprb = @part 1 (cm/cp)*(Umr-(Krri - frrri/sqrt(γrri))) + Krri + frrri/sqrt(γrri)
 
-        # ∂ₜΠ[1] = 0
-        # ∂ₜψr[1] += s*(-Π[1])/(dr̃*Σ[1,1])/2.
 
         s1 = abs(cp[1])/Σ[1,1]
 
@@ -570,12 +577,13 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     #Dirichlet on scalar
     #Um𝜙b = @part n -sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
     # #Neumann on scalar
-    Um𝜙b = @part n sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
+    #Um𝜙b = @part n sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
 
     # Static Neumann
-    #Um𝜙b = @part n -(cp/cm)*Up𝜙
+    Um𝜙b = @part n -(cp/cm)*Up𝜙
 
-    Umrb = Umri
+    #Umrb = Umrin
+    Umrb = -(Upr - Uprin) + Umrin
 
     #∂ᵣUmθ = @part n ( ∂ᵣKθθ - ∂ᵣfrθθ/sqrt(γrr) + ∂ᵣγrr*frθθ/sqrt(γrr)^3/2 )
 
@@ -598,9 +606,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     ∂ₜKθθ[n]  += sn*(Umθb - Umθ)/2.
     ∂ₜfrθθ[n] += -sn*sqrt(γrr[n])*(Umθb - Umθ)/2.
 
-    # for i in 1:6
-    #     @. dtstate.x[i] = 0.
-    # end
+    for i in 1:6
+        @. dtstate.x[i] = 0.
+    end
 
     # Store the calculated state into the param
     # so that we can print it to the screen
@@ -724,31 +732,6 @@ function constraints(regstate::VarContainer{T},param) where T
     return [C, Cr, Crrr, Crθθ, C𝜙, E, Ec]
 
 end
-
-function continuous_print(dt,state::VarContainer{T},param,t) where T
-
-    ###############################################
-    # Outputs status numbers while the program runs
-    ###############################################
-
-    dtstate = param.dtstate::VarContainer{T}
-
-    ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψr,∂ₜΠ = dtstate.x
-
-    println("  ",
-    rpad(string(round(t,digits=1)),10," "),
-    rpad(string(round(maximum(abs.(∂ₜγrr)), digits=3)),12," "),
-    rpad(string(round(maximum(abs.(∂ₜγθθ)), digits=3)),12," "),
-    rpad(string(round(maximum(abs.(∂ₜKrr)), digits=3)),12," "),
-    rpad(string(round(maximum(abs.(∂ₜKθθ)), digits=3)),12," "),
-    rpad(string(round(maximum(abs.(∂ₜfrrr)),digits=3)),12," "),
-    rpad(string(round(maximum(abs.(∂ₜfrθθ)),digits=3)),12," ")
-    )
-
-    return
-
-end
-
 
 function solution_saver(T,sol,param)
 
