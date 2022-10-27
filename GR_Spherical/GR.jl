@@ -229,10 +229,10 @@ function init!(state::VarContainer{T}, param) where T
     n = grid.ncells
     rspan = (rmin,rmax)
 
-    # fρ(M,r) = ( fΠ(M,r)^2 + fψr(M,r)^2/fγrr(M,r) + m^2*f𝜙(M,r)^2 )/2.
-    # fSr(M,r) = fψr(M,r)*fΠ(M,r)
-    fρ(M,r) = 0.
-    fSr(M,r) = 0.
+    fρ(M,r) = ( fΠ(M,r)^2 + fψr(M,r)^2/fγrr(M,r) + m^2*f𝜙(M,r)^2 )/2.
+    fSr(M,r) = fψr(M,r)*fΠ(M,r)
+    # fρ(M,r) = 0.
+    # fSr(M,r) = 0.
 
     f∂rM(M,r) = 4*pi*r^2*(fρ(M,r) - fβʳ(M,r)*fSr(M,r)/fα(M,r))
     f∂ₜγrr(M,r) = -8*pi*r*fSr(M,r)/fα(M,r)
@@ -310,6 +310,8 @@ function init!(state::VarContainer{T}, param) where T
 
     global Uprin = @part n Krr + frrr/sqrt(γrr)
     global Umrin = @part n Krr - frrr/sqrt(γrr)
+    global Upθin = @part n Kθθ + frθθ/sqrt(γrr)
+    global Umθin = @part n Kθθ - frθθ/sqrt(γrr)
 
     # add noise to initial values to assess stability with magnitude s
     s = 0*10^(-10)
@@ -461,18 +463,22 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     @. ∂ₜKθθ  = ( βʳ*∂ᵣKθθ - α*∇ᵣfrθθ/γrr + α + α*Krr*Kθθ/γrr
      + α*frrr*frθθ/γrr^2 - 4*α*frθθ^2/(γrr*γθθ) - α*frθθ*∂ᵣlnᾶ/γrr)
 
-    @. ∂ₜfrrr = ( βʳ*∂ᵣfrrr - α*∂ᵣKrr - α*frrr*Krr/γrr
+    @. ∂ₜfrrr = ( βʳ*∇ᵣfrrr - α*∂ᵣKrr - α*frrr*Krr/γrr
      + 12*α*frθθ*Kθθ*γrr/γθθ^2 - 10*α*frθθ*Krr/γθθ - 4*α*frrr*Kθθ/γθθ
-     - α*Krr*∂ᵣlnᾶ - 4*α*Kθθ*γrr*∂ᵣlnᾶ/γθθ + 3*∂ᵣβʳ*frrr + γrr*∂ᵣ2βʳ )
+     - α*Krr*∂ᵣlnᾶ - 4*α*Kθθ*γrr*∂ᵣlnᾶ/γθθ + 3*∂ᵣβʳ*frrr + γrr*∂ᵣ2βʳ 
+     - (frrr/γrr - 2*frθθ/γθθ)*βʳ*frrr)
 
-    @. ∂ₜfrθθ = ( βʳ*∂ᵣfrθθ - α*∂ᵣKθθ - α*frrr*Kθθ/γrr + 2*α*frθθ*Kθθ/γθθ
-     - α*Kθθ*∂ᵣlnᾶ + ∂ᵣβʳ*frθθ )
+    @. ∂ₜfrθθ = ( βʳ*∇ᵣfrθθ - α*∂ᵣKθθ - α*frrr*Kθθ/γrr + 2*α*frθθ*Kθθ/γθθ
+     - α*Kθθ*∂ᵣlnᾶ + ∂ᵣβʳ*frθθ - (frrr/γrr - 2*frθθ/γθθ)*βʳ*frθθ)
 
     # Klein-Gordon System
 
     @. ∂ₜ𝜙 = βʳ*∂ᵣ𝜙 - α*Π
 
-    @. ∂ₜψr =  βʳ*∂ᵣψr - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣlnᾶ)*Π + ∂ᵣβʳ*ψr
+    #@. ∂ₜψr =  βʳ*∂ᵣψr - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣlnᾶ)*Π + ∂ᵣβʳ*ψr
+
+    @. ∂ₜψr = ( βʳ*∇ᵣψr - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣᾶ/ᾶ)*Π + ∂ᵣβʳ*ψr 
+     - (frrr/γrr - 2*frθθ/γθθ)*βʳ*ψr)
 
     @. ∂ₜΠ = ( βʳ*∂ᵣΠ - α*∇ᵣψr/γrr + α*(Krr/γrr + 2*Kθθ/γθθ)*Π
     + α*(frrr/γrr - 6*frθθ/γθθ - ∂ᵣlnᾶ)*ψr/γrr + m^2*α*𝜙 )
@@ -508,12 +514,12 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         Upθb = @part 1 ((2*M0*sqrt(γθθ) - γθθ)/Umθ)
 
         #Dirichlet on scalar
-        #Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
+        Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
         # #Neumann on scalar
         #Up𝜙b = @part 1 sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
 
         # Static Dirichlet
-        Up𝜙b = @part 1 (cm/cp)*Um𝜙
+        #Up𝜙b = @part 1 (cm/cp)*Um𝜙
 
         # Uprb = Upri
 
@@ -572,17 +578,21 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     # Reflecting conditions
 
+    #Mtot_int = 4*pi*sum(Σ*((frθθ.*ρ .- Kθθ.*Sr).*sqrt.(γθθ))) + M0
+
     Umθb = @part n ((2*Mtot*sqrt(γθθ) - γθθ)/Upθ)
+
+    #Umθb = @part n ((2*Mtot*sqrt(γθθ) - γθθ)/Upθ)
 
     #Dirichlet on scalar
     #Um𝜙b = @part n -sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
     # #Neumann on scalar
-    #Um𝜙b = @part n sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
+    #a = 0.5
+    Um𝜙b = @part n sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
 
     # Static Neumann
-    Um𝜙b = @part n -(cp/cm)*Up𝜙
+    #Um𝜙b = @part n -(cp/cm)*Up𝜙
 
-    #Umrb = Umrin
     Umrb = -(Upr - Uprin) + Umrin
 
     #∂ᵣUmθ = @part n ( ∂ᵣKθθ - ∂ᵣfrθθ/sqrt(γrr) + ∂ᵣγrr*frθθ/sqrt(γrr)^3/2 )
@@ -590,9 +600,11 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # Umrb = @part n (-Upr - Umθ*γrr/γθθ - 2*∂ᵣUmθ*sqrt(γrr)/Umθ - γrr/Umθ
     #      + 8*pi*γrr*γθθ*(ρ - Sr/sqrt(γrr))/Umθ )
 
+    #Transmitting Conditions?
+    #Umrb = Umrin
+
     @part n ∂ₜγrr = ( (2*frrr - 8*frθθ*γrr/γθθ)*βʳ + 2*∂ᵣβʳ*γrr - 2*α*Krr )
     @part n ∂ₜγθθ = ( 2*frθθ*βʳ - 2*α*Kθθ )
-    #@part n ∂ₜγθθ = sqrt(γrr)*(cm*Umθb-cp*Upθ)
     @part n ∂ₜ𝜙   = (βʳ*ψr - α*Π)
 
     sn = abs(cm[n])/Σ[n,n]
@@ -605,10 +617,6 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     ∂ₜKθθ[n]  += sn*(Umθb - Umθ)/2.
     ∂ₜfrθθ[n] += -sn*sqrt(γrr[n])*(Umθb - Umθ)/2.
-
-    for i in 1:6
-        @. dtstate.x[i] = 0.
-    end
 
     # Store the calculated state into the param
     # so that we can print it to the screen

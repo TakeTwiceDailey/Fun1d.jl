@@ -134,16 +134,16 @@ end
 #Kerr-Schild Coordinates
 # sign=1 for ingoing (black hole), sign=-1 for outgoing (white hole)
 
-# sign = 1.
+sign = 1.
 
-# fᾶ(M,r) = 1/(r^2 + 2*M(r)*r)
-# fβʳ(M,r) = sign*2*M(r)/(2*M(r)+r)
-# fγrr(M,r) = 1 + 2*M(r)/r
-# fγθθ(M,r) = r^2
+fᾶ(M,r) = 1/(r^2 + 2*M(r)*r)
+fβʳ(M,r) = sign*2*M(r)/(2*M(r)+r)
+fγrr(M,r) = 1 + 2*M(r)/r
+fγθθ(M,r) = r^2
 
-# fᾶ(M::Number,r) = 1/(r^2+2*M*r)
-# fβʳ(M::Number,r) = sign*2*M/(2*M+r)
-# fγrr(M::Number,r) = 1 + 2*M/r
+fᾶ(M::Number,r) = 1/(r^2+2*M*r)
+fβʳ(M::Number,r) = sign*2*M/(2*M+r)
+fγrr(M::Number,r) = 1 + 2*M/r
 
 ### NOTE: other coordinate systems require
 #   careful consideration of reg_list in inputfile.jl
@@ -169,14 +169,14 @@ end
 
 # Cartesian Minkowski
 
-fᾶ(M,r) = 1.
-fβʳ(M,r) = 0.
-fγrr(M,r) = 1.
-fγθθ(M,r) = 1.
+# fᾶ(M,r) = 1.
+# fβʳ(M,r) = 0.
+# fγrr(M,r) = 1.
+# fγθθ(M,r) = 1.
 
-fᾶ(M::Number,r) = 1.
-fβʳ(M::Number,r) = 0.
-fγrr(M::Number,r) = 1.
+# fᾶ(M::Number,r) = 1.
+# fβʳ(M::Number,r) = 0.
+# fγrr(M::Number,r) = 1.
 
 # Define derivatives, extrinsic curavture, and the f_{ijk} variables
 
@@ -360,7 +360,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     @. ∂ₜ𝜙 = βʳ*∂ᵣ𝜙 - α*Π
     #@. ∂ₜ𝜙 = βʳ*ψr - α*Π
 
-    @. ∂ₜψr =  βʳ*∂ᵣψr - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣᾶ/ᾶ)*Π + ∂ᵣβʳ*ψr
+    @. ∂ₜψr =  βʳ*∂ᵣψr - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣᾶ/ᾶ)*Π + ∂ᵣβʳ*ψr 
 
     @. ∂ₜΠ = ( βʳ*∂ᵣΠ - α*∇ᵣψr/γrr + α*(Krr/γrr + 2*Kθθ/γθθ)*Π
      + α*(frrr/γrr - 6*frθθ/γθθ - ∂ᵣᾶ/ᾶ)*ψr/γrr + m^2*α*𝜙 )
@@ -560,7 +560,7 @@ function solution_saver(T,sol,param)
     # in the choosen data folder directory
     ###############################################
 
-    folder = string("Cart_Static_n=",      n,
+    folder = string("Static_n=",      n,
                     "_rspan=", round.(rspan, digits=2),
                     "_tspan=", round.(tspan, digits=2),
                     "_CFL=",   round(CFL, digits=2),
