@@ -10,7 +10,7 @@ macro T_str(str::AbstractString)
 end
 
 # Number of grid points
-const n = 2001;
+const n = 4001;
 
 # Spatial coordinate domain span in units of M0
 const rspan = T[T"3.0",T"8.0"];
@@ -45,7 +45,7 @@ const m = T"0.";
 # Here is a pulse with amplitude A, total width 2*σr, and location r0
 const r0 = T"6.";
 const σr = T"0.5";
-const Amp  = T"0.06";
+const Amp  = T"0.05";
 #const Amp  = T"0.0";
 const p = 4;
 
@@ -64,7 +64,7 @@ f∂ₜ𝜙(M,r) = (r0-σr)<r<(r0+σr) ? -(8*Amp*fcm(M,r)/r)*((r-r0)^2-σr^2)^3*
 
 # Magnitude of dissipation
 # Must be of order 1.
-const ε = T"2.0"/(2^6);
+const ε = T"1.0"/(2^6);
 
 # Which variables to perform regularization
 # State vector is ordered as:
