@@ -510,9 +510,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         Upθb = @part 1 ((2*M0*sqrt(γθθ) - γθθ)/Umθ)
 
         #Dirichlet on scalar
-        Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
+        #Up𝜙b = @part 1 -sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
         # #Neumann on scalar
-        #Up𝜙b = @part 1 sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
+        Up𝜙b = @part 1 sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
 
         # Static Dirichlet
         #Up𝜙b = @part 1 (cm/cp)*Um𝜙
@@ -567,16 +567,14 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     # # Transmitting conditions
     #
-    # Umθb =
-    #
     # #Transmission on scalar
-    # Up𝜙b = 0.
+    Um𝜙b = 0.
 
     # Reflecting conditions
 
-    #Mtot_int = 4*pi*sum(Σ*((frθθ.*ρ .- Kθθ.*Sr).*sqrt.(γθθ))) + M0
+    Mtot_int = 4*pi*sum(Σ*((frθθ.*ρ .- Kθθ.*Sr).*sqrt.(γθθ))) + M0
 
-    Umθb = @part n ((2*Mtot*sqrt(γθθ) - γθθ)/Upθ)
+    Umθb = @part n ((2*Mtot_int*sqrt(γθθ) - γθθ)/Upθ)
 
     #Umθb = @part n ((2*Mtot*sqrt(γθθ) - γθθ)/Upθ)
 
@@ -584,7 +582,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     #Um𝜙b = @part n -sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
     # #Neumann on scalar
     #a = 0.5
-    Um𝜙b = @part n sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
+    #Um𝜙b = @part n sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
 
     # Static Neumann
     #Um𝜙b = @part n -(cp/cm)*Up𝜙

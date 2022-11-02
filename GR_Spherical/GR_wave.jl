@@ -401,7 +401,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     Um𝜙   = @part 1 ( Π - ψr/sqrt(γrr) )
     
     # Static Dirichlet
-    Up𝜙b = @part 1 (cm/cp)*Um𝜙
+    # Up𝜙b = @part 1 (cm/cp)*Um𝜙
+    # Static Neumann
+    Up𝜙b = @part 1 -(cm/cp)*Um𝜙
     
     s1 = cp/Σ[1,1]
 
@@ -450,8 +452,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     Um𝜙 = @part n ( Π - ψr/sqrt(γrr) )
 
      # Static Neumann
-    Um𝜙b = @part n -(cp/cm)*Up𝜙
+    #Um𝜙b = @part n -(cp/cm)*Up𝜙
     #Um𝜙b = Up𝜙 - 2*ψrin/sqrt(γrr[n])
+    Um𝜙b = 0
 
     sn = -cm/Σ[n,n]
 
@@ -478,6 +481,11 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     for i in 1:numvar
         dtstate2.x[i] .= dtstate.x[i]
+    end
+
+    for i in 1:numvar
+        mul!(dtstate.x[i],D4,regstate.x[i],1.,1.)
+        # this syntax is equivalent to dtstate.x[i] .+= D4*regstate.x[i]
     end
 
     # catch any errors, save them to print later

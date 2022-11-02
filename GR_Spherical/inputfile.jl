@@ -9,11 +9,16 @@ macro T_str(str::AbstractString)
     :(parse(T,$str))
 end
 
+# Initial mass of Black Hole
+# M0 = 0. for flat Spherical Coordinates
+# M0 > 0. for Schwarzschild black hole
+const M0 = T"1.";
+
 # Number of grid points
-const n = 4001;
+const n = 32001;
 
 # Spatial coordinate domain span in units of M0
-const rspan = T[T"3.0",T"8.0"];
+const rspan = T[T"2.01",T"6.0"];
 
 # Inverse Courant factor (4 works fine, CFL condition demands >~ 1)
 const CFL::T = 4;
@@ -25,27 +30,22 @@ const dr = T((rspan[2]-rspan[1])/(n-1));
 const dt = dr/CFL::T;
 
 # Temporal coordinate span in units of M0
-const tspan = T[T"0.", T"200."];
+const tspan = T[T"0.", T"20."];
 
 # Interval between prints to the screen in units of M0
-const print_interval = T"10.0";
+const print_interval = T"1.0";
 
 # Interval to save the state in units of M0
-const save_interval = T"0.2";
-
-# Initial mass of Black Hole
-# M0 = 0. for flat Spherical Coordinates
-# M0 > 0. for Schwarzschild black hole
-const M0 = T"1.";
+const save_interval = T"0.1";
 
 # Mass of scalar field
 const m = T"0.";
 
 # Initial conditions on the scalar field
 # Here is a pulse with amplitude A, total width 2*σr, and location r0
-const r0 = T"6.";
+const r0 = T"4.";
 const σr = T"0.5";
-const Amp  = T"0.05";
+const Amp  = T"0.001";
 #const Amp  = T"0.0";
 const p = 4;
 
