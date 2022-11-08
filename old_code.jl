@@ -1,3 +1,73 @@
+    # Copy the state into the parameters so that it can be changed
+
+    #######################
+    # Attention!
+    #
+    # Do not do the following:
+    # state .= regstate
+    #
+    # This results in an intense slowdown
+    # Do instead:
+    # for i in 1:numvar
+    #     state.x[i] .= regstate.x[i]
+    # end
+
+
+    # Calculated lapse and derivatives of densitized lapse
+
+    # @. α = ᾶ*γθθ*sqrt(γrr)
+    # @. ∂ᵣlnᾶ = ∂ᵣᾶ/ᾶ
+    # @. ∂ᵣ2lnᾶ = (∂ᵣ2ᾶ*ᾶ - ∂ᵣᾶ^2)/ᾶ^2
+
+
+# function deriv!(df,f)
+    
+#     df[1:6] .= ql*f[1:9]
+
+#     @turbo for i in 7:n-6
+#         df[i] = (-f[i-3] + 9*f[i-2] - 45*f[i-1] + 45*f[i+1] - 9*f[i+2] + f[i+3])/60/dr
+#     end
+
+#     df[n:n-5] .= qr*f[n:n-8]
+
+# end
+
+# # Sample the 'regular' values and derivatives,
+    # # which are used in the regularization process
+    # sample!(γrri,   grid, r -> fγrr(M0,r)               )
+    # sample!(γθθi,   grid, r -> fγθθ(M0,r)               )
+    # sample!(Krri,   grid, r -> fKrr(M0,f∂ₜγrri,r)        )
+    # sample!(Kθθi,   grid, r -> fKθθ(M0,f∂ₜγθθi,r)        )
+    # sample!(frrri,  grid, r -> ffrrr(M0,r)              )
+    # sample!(frθθi,  grid, r -> ffrθθ(M0,r)              )
+    # sample!(𝜙i,     grid, r -> f𝜙(M0,r)                 )
+    # sample!(ψri,    grid, r -> fψr(M0,r)                )
+    # sample!(Πi,     grid, r -> fΠ(M0,r)                 )
+
+# function continuous_print(integrator)
+
+#     ###############################################
+#     # Outputs status numbers while the program runs
+#     ###############################################
+
+#     dtstate = integrator.p.dtstate
+
+#     ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψr,∂ₜΠ = dtstate.x
+
+#     println("| ",
+#     rpad(string(round(integrator.t,digits=1)),5," "),"|   ",
+#     rpad(string(round(maximum(abs.(∂ₜγrr)), digits=3)),8," "),"|   ",
+#     rpad(string(round(maximum(abs.(∂ₜγθθ)), digits=3)),8," "),"|   ",
+#     rpad(string(round(maximum(abs.(∂ₜKrr)), digits=3)),8," "),"|   ",
+#     rpad(string(round(maximum(abs.(∂ₜKθθ)), digits=3)),8," "),"|   ",
+#     rpad(string(round(maximum(abs.(∂ₜfrrr)),digits=3)),9," "),"|   ",
+#     rpad(string(round(maximum(abs.(∂ₜfrθθ)),digits=3)),9," "),"|"
+#     )
+
+#     return
+
+# end
+
 # γrrrhs = ∂ₜγrr[n]; γθθrhs = ∂ₜγθθ[n];
 # Krrrhs = ∂ₜKrr[n]; frrrrhs = ∂ₜfrrr[n];
 # Kθθrhs = ∂ₜKθθ[n]; frθθrhs = ∂ₜfrθθ[n];

@@ -16,6 +16,8 @@ using ForwardDiff
 using HDF5
 using FileIO
 
+using LoopVectorization
+using BenchmarkTools
 using PrettyTables
 
 # Include the input parameter file
@@ -72,12 +74,7 @@ end
 struct Param{T}
     grid::Grid{T}
     gauge::VarContainer{T}
-    speeds::VarContainer{T}
-    init_state::VarContainer{T}
-    init_drstate::VarContainer{T}
-    state::VarContainer{T}
     drstate::VarContainer{T}
-    dtstate::VarContainer{T}
     temp::VarContainer{T}
 end
 
@@ -172,8 +169,6 @@ fγrr(M::Number,r) = 1 + 2*M/r
 
 # Define derivatives, extrinsic curavture, and the f_{ijk} variables
 
-fα(M,r) = fᾶ(M,r)*fγθθ(M,r)*sqrt(fγrr(M,r))
-
 fcp(M,r) = -fβʳ(M,r) + fα(M,r)/sqrt(fγrr(M,r))
 fcm(M,r) = -fβʳ(M,r) - fα(M,r)/sqrt(fγrr(M,r))
 
@@ -181,12 +176,11 @@ f∂ᵣᾶ(M,r)         = ForwardDiff.derivative(r -> fᾶ(M,r), r)
 f∂ᵣ2ᾶ(M,r)        = ForwardDiff.derivative(r -> f∂ᵣᾶ(M,r), r)
 f∂ᵣβʳ(M,r)        = ForwardDiff.derivative(r -> fβʳ(M,r), r)
 f∂ᵣ2βʳ(M,r)       = ForwardDiff.derivative(r -> f∂ᵣβʳ(M,r), r)
-f∂ᵣcp(M,r)        = ForwardDiff.derivative(r -> fcp(M,r), r)
-f∂ᵣ2cp(M,r)       = ForwardDiff.derivative(r -> f∂ᵣcp(M,r), r)
-f∂ᵣcm(M,r)        = ForwardDiff.derivative(r -> fcm(M,r), r)
-f∂ᵣ2cm(M,r)       = ForwardDiff.derivative(r -> f∂ᵣcm(M,r), r)
 
-f∂ᵣβʳ(M,r)  = ForwardDiff.derivative(r -> fβʳ(M,r),  r)
+fα(M,r)           = fᾶ(M,r)*fγθθ(M,r)*sqrt(fγrr(M,r))
+f∂ᵣlnᾶ(M,r)       = f∂ᵣᾶ(M,r)/fᾶ(M,r) 
+f∂ᵣ2lnᾶ(M,r)      = (f∂ᵣ2ᾶ(M,r)*fᾶ(M,r) - f∂ᵣᾶ(M,r)^2)/fᾶ(M,r)^2
+
 f∂ᵣγrr(M,r) = ForwardDiff.derivative(r -> fγrr(M,r), r)
 f∂ᵣγθθ(M,r) = ForwardDiff.derivative(r -> fγθθ(M,r), r)
 
@@ -211,16 +205,10 @@ function init!(state::VarContainer{T}, param) where T
     # Specifies the Initial Conditions
     ############################################
 
-    init_state = param.init_state
-    init_drstate = param.init_drstate
     gauge = param.gauge
-    speeds = param.speeds
 
     γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,ψr,Π = state.x
-    ᾶ,βʳ,∂ᵣᾶ,∂ᵣβʳ,∂ᵣ2ᾶ,∂ᵣ2βʳ,∂ᵣ3βʳ,∂ᵣ4βʳ,∂ᵣ5βʳ = gauge.x
-    cp,cm,∂ᵣcp,∂ᵣcm,∂ᵣ2cp,∂ᵣ2cm,∂ᵣ3cp,∂ᵣ4cp,∂ᵣ5cp = speeds.x
-    γrri,γθθi,Krri,Kθθi,frrri,frθθi,𝜙i,ψri,Πi = init_state.x
-    ∂ᵣγrr,∂ᵣγθθ,∂ᵣKrr,∂ᵣKθθ,∂ᵣfrrr,∂ᵣfrθθ,∂ᵣ𝜙,∂ᵣψr,∂ᵣΠ = init_drstate.x
+    ᾶ,βʳ,∂ᵣᾶ,∂ᵣβʳ,∂ᵣ2ᾶ,∂ᵣ2βʳ,α,∂ᵣlnᾶ,∂ᵣ2lnᾶ = gauge.x
 
     grid = param.grid
     rmin = grid.domain.rmin
@@ -258,25 +246,6 @@ function init!(state::VarContainer{T}, param) where T
 
     # M0(r̃) = M0
 
-    # Sample the 'regular' values and derivatives,
-    # which are used in the regularization process
-    sample!(γrri,   grid, r -> fγrr(M0,r)               )
-    sample!(γθθi,   grid, r -> fγθθ(M0,r)               )
-    sample!(Krri,   grid, r -> fKrr(M0,f∂ₜγrri,r)        )
-    sample!(Kθθi,   grid, r -> fKθθ(M0,f∂ₜγθθi,r)        )
-    sample!(frrri,  grid, r -> ffrrr(M0,r)              )
-    sample!(frθθi,  grid, r -> ffrθθ(M0,r)              )
-    sample!(𝜙i,     grid, r -> f𝜙(M0,r)                 )
-    sample!(ψri,    grid, r -> fψr(M0,r)                )
-    sample!(Πi,     grid, r -> fΠ(M0,r)                 )
-
-    sample!(∂ᵣγrr,  grid, r -> f∂ᵣγrr(M0,r)             )
-    sample!(∂ᵣγθθ,  grid, r -> f∂ᵣγθθ(M0,r)             )
-    sample!(∂ᵣKrr,  grid, r -> f∂ᵣKrr(M0,f∂ₜγrri,r)      )
-    sample!(∂ᵣKθθ,  grid, r -> f∂ᵣKθθ(M0,f∂ₜγθθi,r)      )
-    sample!(∂ᵣfrrr, grid, r -> f∂ᵣfrrr(M0,r)            )
-    sample!(∂ᵣfrθθ, grid, r -> f∂ᵣfrθθ(M0,r)            )
-
     # Sample the state initial vector
     sample!(γrr,    grid, r -> fγrr(M,r)                )
     sample!(γθθ,    grid, r -> fγθθ(M,r)                )
@@ -294,14 +263,10 @@ function init!(state::VarContainer{T}, param) where T
     sample!(∂ᵣᾶ,    grid, r -> f∂ᵣᾶ(M,r)                )
     sample!(∂ᵣβʳ,   grid, r -> f∂ᵣβʳ(M,r)               )
     sample!(∂ᵣ2ᾶ,   grid, r -> f∂ᵣ2ᾶ(M,r)               )
-    sample!(∂ᵣ2βʳ,  grid, r -> f∂ᵣ2βʳ(M,r)            )
-
-    sample!(cp,    grid, r -> fcp(M,r)                 )
-    sample!(cm,    grid, r -> fcm(M,r)                 )
-    sample!(∂ᵣcp,  grid, r -> f∂ᵣcp(M,r)               )
-    sample!(∂ᵣcm,  grid, r -> f∂ᵣcm(M,r)               )
-    sample!(∂ᵣ2cp, grid, r -> f∂ᵣ2cp(M,r)              )
-    sample!(∂ᵣ2cm, grid, r -> f∂ᵣ2cm(M,r)              )
+    sample!(∂ᵣ2βʳ,  grid, r -> f∂ᵣ2βʳ(M,r)              )
+    sample!(α,      grid, r -> fα(M,r)                  )
+    sample!(∂ᵣlnᾶ,  grid, r -> f∂ᵣlnᾶ(M,r)              )
+    sample!(∂ᵣ2lnᾶ, grid, r -> f∂ᵣ2lnᾶ(M,r)             )
 
     # Sample initial values of the r characteristics
 
@@ -317,23 +282,16 @@ function init!(state::VarContainer{T}, param) where T
     s = 0*10^(-10)
 
     for i in 1:numvar
-        if i in reg_list
-            for j in 1:n
-               state.x[i][j] /= init_state.x[i][j]
-               state.x[i][j] += s*rand(Uniform(-1,1))
-            end
-        else
-            for j in 1:n
-               state.x[i][j] += s*rand(Uniform(-1,1))
-            end
+        for j in 1:n
+            state.x[i][j] += s*rand(Uniform(-1,1))
         end
     end
 
-    rhs!(param.dtstate, state, param, 0.)
+    #rhs!(param.dtstate, state, param, 0.)
 
 end
 
-function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T}, t) where T
+function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, t) where T
 
     ############################################
     # Caculates the right hand ride of the
@@ -350,49 +308,20 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # values of the evolved variables.
     ############################################
 
+
     # In order to catch errors and still have the integrator finish
     try
 
     # Unpack the parameters
-
-    grid = param.grid
-    rmin = grid.domain.rmin
-    rmax = grid.domain.rmax
-
-    state = param.state
     drstate = param.drstate
-    dtstate2 = param.dtstate
     temp = param.temp
-
-    init_state = param.init_state
-    init_drstate = param.init_drstate
     gauge = param.gauge
-    speeds = param.speeds
-
-    # Copy the state into the parameters so that it can be changed
-
-    #######################
-    # Attention!
-    #
-    # Do not do the following:
-    # state .= regstate
-    #
-    # This results in an intense slowdown
-    # Do instead:
-    for i in 1:numvar
-        state.x[i] .= regstate.x[i]
-    end
 
     # Give names to individual variables
-
     γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,ψr,Π = state.x
     ∂ᵣγrr,∂ᵣγθθ,∂ᵣKrr,∂ᵣKθθ,∂ᵣfrrr,∂ᵣfrθθ,∂ᵣ𝜙,∂ᵣψr,∂ᵣΠ = drstate.x
     ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψr,∂ₜΠ = dtstate.x
     ᾶ,βʳ,∂ᵣᾶ,∂ᵣβʳ,∂ᵣ2ᾶ,∂ᵣ2βʳ,α,∂ᵣlnᾶ,∂ᵣ2lnᾶ = gauge.x
-    cp,cm,∂ᵣcp,∂ᵣcm,∂ᵣ2cp,∂ᵣ2cm,∂ᵣ3cp,∂ᵣ4cp,∂ᵣ5cp = speeds.x
-
-    γrri,γθθi,Krri,Kθθi,frrri,frθθi,𝜙i,ψri,Πi = init_state.x
-    ∂ᵣγrri,∂ᵣγθθi,∂ᵣKrri,∂ᵣKθθi,∂ᵣfrrri,∂ᵣfrθθi,∂ᵣ𝜙i,∂ᵣψri,∂ᵣΠi = init_drstate.x
 
     ∇ᵣψr = temp.x[1]; ∇ᵣfrrr = temp.x[2]; ∇ᵣfrθθ = temp.x[3];
 
@@ -400,21 +329,17 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # and convert between the computational r̃ coordinate
     # and the traditional r coordinate
 
-    for i in 1:numvar
+    #return #0.2ms about ~40% of runtime is derivatives
+
+    Threads.@threads for i in 1:numvar
         mul!(drstate.x[i],D,state.x[i])
-    end
-
-    # Convert between regularized variables and cannonical variables
-
-    for i in reg_list
-        @. state.x[i] *= init_state.x[i]
-        @. drstate.x[i] = (init_state.x[i]*drstate.x[i]
-              + init_drstate.x[i]*state.x[i] )
     end
 
     ∇ᵣψr   .= (D*(sqrt.(γrr).*γθθ.*ψr  ))./(sqrt.(γrr).*γθθ)
     ∇ᵣfrrr .= (D*(sqrt.(γrr).*γθθ.*frrr))./(sqrt.(γrr).*γθθ)
     ∇ᵣfrθθ .= (D*(sqrt.(γrr).*γθθ.*frθθ))./(sqrt.(γrr).*γθθ)
+
+    #return #6.8ms
 
     # Source terms to GR
 
@@ -426,16 +351,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     @. Srr = γrr*( Π^2 + ψr^2/γrr - (m^2)*𝜙^2)/2  # Radial pressure component
     @. Sθθ = γθθ*( Π^2 - ψr^2/γrr - (m^2)*𝜙^2)/2  # Angular pressure component
 
-    # Calculated lapse and derivatives of densitized lapse
-
     @. α = ᾶ*γθθ*sqrt(γrr)
-    @. ∂ᵣlnᾶ = ∂ᵣᾶ/ᾶ
-    @. ∂ᵣ2lnᾶ = (∂ᵣ2ᾶ*ᾶ - ∂ᵣᾶ^2)/ᾶ^2
 
-    # Calculate the advection speeds
-
-    @. cp = -βʳ + ᾶ*γθθ
-    @. cm = -βʳ - ᾶ*γθθ
+    #return #7.6ms about ~25% of runtime is the actual RHS
 
     #########################################################
     # Evolution Equations
@@ -488,7 +406,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # Calculates the Apparent Horizon, if there is one
     # in the domain, no inner boundary conditions are applied
 
-    AH = temp.x[1]
+    #return #11.6ms
+
+    AH = temp.x[9]
     @. AH = Kθθ - frθθ/sqrt(γrr)
     is_AH = false
     for i in 1:n-1 if AH[i]*AH[i+1] <= 0. is_AH = true; break; end end
@@ -506,6 +426,8 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         Up𝜙   = @part 1 ( Π + ψr/sqrt(γrr) )
         Um𝜙   = @part 1 ( Π - ψr/sqrt(γrr) )
 
+        cp = @part 1 -βʳ + ᾶ*γθθ
+        cm = @part 1 -βʳ - ᾶ*γθθ
 
         Upθb = @part 1 ((2*M0*sqrt(γθθ) - γθθ)/Umθ)
 
@@ -540,8 +462,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
         #Dirichlet on r-mode
         #Uprb = @part 1 (cm/cp)*(Umr-(Krri - frrri/sqrt(γrri))) + Krri + frrri/sqrt(γrri)
 
-
-        s1 = abs(cp[1])/Σ[1,1]
+        s1 = abs(cp)/Σ[1,1]
 
         ∂ₜΠ[1] += s1*(Up𝜙b - Up𝜙)/2.
         ∂ₜψr[1] += s1*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/2.
@@ -564,6 +485,9 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
     Up𝜙 = @part n ( Π + ψr/sqrt(γrr) )
     Um𝜙 = @part n ( Π - ψr/sqrt(γrr) )
+
+    cp = @part n -βʳ + ᾶ*γθθ
+    cm = @part n -βʳ - ᾶ*γθθ
 
     # # Transmitting conditions
     #
@@ -601,7 +525,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     @part n ∂ₜγθθ = ( 2*frθθ*βʳ - 2*α*Kθθ )
     @part n ∂ₜ𝜙   = (βʳ*ψr - α*Π)
 
-    sn = abs(cm[n])/Σ[n,n]
+    sn = abs(cm)/Σ[n,n]
 
     ∂ₜΠ[n] += sn*(Um𝜙b - Um𝜙)/2.
     ∂ₜψr[n] += -sn*sqrt(γrr[n])*(Um𝜙b - Um𝜙)/2.
@@ -615,22 +539,16 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     # Store the calculated state into the param
     # so that we can print it to the screen
 
-    for i in 1:numvar
-        dtstate2.x[i] .= dtstate.x[i]
-    end
-
-    # Convert back to regularized variables
-
-    for i in reg_list
-        @. dtstate.x[i] /= init_state.x[i]
-    end
+    #return #12ms about ~30% of runtime is dissipation
 
     # Add the numerical dissipation to regularized dtstate
 
-    for i in 1:numvar
-        mul!(dtstate.x[i],D4,regstate.x[i],1.,1.)
+    Threads.@threads for i in 1:numvar
+        mul!(dtstate.x[i],D4,state.x[i],1,1)
         # this syntax is equivalent to dtstate.x[i] .+= D4*regstate.x[i]
     end
+
+    #return #16.5ms
 
     # catch any errors, save them to print later
     catch e
@@ -640,22 +558,20 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
 end
 
-function rhs_all(regstate::VarContainer{T}, param::Param{T}, t) where T
+# function rhs_all(state::VarContainer{T}, param::Param{T}, t) where T
 
-    # Runs the right-hand-side routine, but with allocation so that
-    # the state can be saved at the end.
+#     # Runs the right-hand-side routine, but with allocation so that
+#     # the state can be saved at the end.
 
-    n = param.grid.ncells
+#     dtstate = similar(ArrayPartition,T,n)
 
-    dtstate = similar(ArrayPartition,T,n)
+#     rhs!(dtstate,state,param,t)
 
-    rhs!(dtstate,regstate,param,t)
+#     return dtstate
 
-    return dtstate
+# end
 
-end
-
-function constraints(regstate::VarContainer{T},param) where T
+function constraints(state::VarContainer{T},param) where T
 
     ############################################
     # Caculates the constraints of the system
@@ -669,37 +585,21 @@ function constraints(regstate::VarContainer{T},param) where T
 
     # Unpack Variables
 
-    state = param.state
     drstate = param.drstate
     gauge = param.gauge
-
-    for i in 1:numvar
-        state.x[i] .= regstate.x[i]
-    end
 
     γrr,γθθ,Krr,Kθθ,frrr,frθθ,𝜙,ψr,Π = state.x
     ∂ᵣγrr,∂ᵣγθθ,∂ᵣKrr,∂ᵣKθθ,∂ᵣfrrr,∂ᵣfrθθ,∂ᵣ𝜙,∂ᵣψr,∂ᵣΠ = drstate.x
     ᾶ,βʳ,∂ᵣᾶ,∂ᵣβʳ,∂ᵣ2ᾶ,∂ᵣ2βʳ,α,∂ᵣlnᾶ,∂ᵣ2lnᾶ = gauge.x
 
-    init_state = param.init_state
-    init_drstate = param.init_drstate
-
     temp = param.temp
-    grid = param.grid
 
     for i in 1:numvar
         mul!(drstate.x[i],D,state.x[i])
     end
 
-    for i in reg_list
-        @. state.x[i] *= init_state.x[i]
-        @. drstate.x[i] = (init_state.x[i]*drstate.x[i]
-              + init_drstate.x[i]*state.x[i] )
-    end
-
     ρ = temp.x[1]; Sr = temp.x[2]
 
-    @. α = ᾶ*γθθ*sqrt(γrr)
     @. ρ = (Π^2 + ψr^2/γrr + (m^2)*𝜙^2)/2.
     #Lower Index
     @. Sr = ψr*Π
@@ -765,12 +665,9 @@ function solution_saver(T,sol,param)
     #"∂ₜγrr","∂ₜγθθ","∂ₜKrr","∂ₜKθθ","∂ₜfrrr","∂ₜfrθθ","∂ₜ𝜙","∂ₜψr","∂ₜΠ",
     "C","Cr","Crrr","Crtt","Cphi","E","Ec"])
 
-    varlen = length(vars)
+    #varlen = length(vars)
     tlen = size(sol)[2]
     grid = param.grid
-
-    init_state = param.init_state
-    init_drstate = param.init_drstate
 
     #dtstate = [rhs_all(sol[i],param,0.) for i = 1:tlen]
 
@@ -783,19 +680,8 @@ function solution_saver(T,sol,param)
     save(string(path,"/coords.h5"), Dict("r"=>r,"t"=>sol.t[:]) )
 
     for j = 1:numvar
-
-        if j in reg_list
-            for i = 1:tlen
-                @. array[i,:] = sol[i].x[j]*init_state.x[j]
-            end
-            save(string(path,"/",vars[j],".h5"), Dict(vars[j]=>array ) )
-        else
-            for i = 1:tlen
-                @. array[i,:] = sol[i].x[j]
-            end
-            save(string(path,"/",vars[j],".h5"), Dict(vars[j]=>array ) )
-        end
-
+        for i = 1:tlen @. array[i,:] = sol[i].x[j] end
+        save(string(path,"/",vars[j],".h5"), Dict(vars[j]=>array ) )
     end
 
     for j = 1:5
@@ -833,64 +719,7 @@ function error_handler(regstate,t,integrator)
 end
 
 # Terminates the integrator when error_handler returns true
-error_cb = DiscreteCallback(error_handler,terminate!,save_positions=(false,false))
-
-
-function print_times(regstate,t,integrator)
-    t in tspan[1]:print_interval:tspan[2]
-end
-
-function continuous_print(integrator)
-
-    ###############################################
-    # Outputs status numbers while the program runs
-    ###############################################
-
-    dtstate = integrator.p.dtstate
-
-    ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψr,∂ₜΠ = dtstate.x
-
-    println("| ",
-    rpad(string(round(integrator.t,digits=1)),5," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜγrr)), digits=3)),8," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜγθθ)), digits=3)),8," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜKrr)), digits=3)),8," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜKθθ)), digits=3)),8," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜfrrr)),digits=3)),9," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜfrθθ)),digits=3)),9," "),"|"
-    )
-
-    return
-
-end
-
-function initial_print(param::Param)
-
-    ###############################################
-    # Outputs initial status numbers
-    ###############################################
-
-    dtstate = param.dtstate
-
-    ∂ₜγrr,∂ₜγθθ,∂ₜKrr,∂ₜKθθ,∂ₜfrrr,∂ₜfrθθ,∂ₜ𝜙,∂ₜψr,∂ₜΠ = dtstate.x
-
-    println("| ",
-    rpad(0.0,5," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜγrr)), digits=3)),8," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜγθθ)), digits=3)),8," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜKrr)), digits=3)),8," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜKθθ)), digits=3)),8," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜfrrr)),digits=3)),9," "),"|   ",
-    rpad(string(round(maximum(abs.(∂ₜfrθθ)),digits=3)),9," "),"|"
-    )
-
-    return
-
-end
-
-print_cb = DiscreteCallback(print_times,continuous_print,save_positions=(false,false))
-
-cb = CallbackSet(error_cb,print_cb)
+cb = DiscreteCallback(error_handler,terminate!,save_positions=(false,false))
 
 function main()
 
@@ -914,8 +743,6 @@ function main()
     domain = Domain{T}(rmin, rmax)
     grid = Grid(domain, n)
 
-    tmin, tmax = tspan
-
     atol = eps(T)^(T(3) / 4)
 
     alg = RK4()
@@ -923,54 +750,57 @@ function main()
 
     #printlogo()
 
-    # custom_progress_step = round(Int64, printtimes/dt)
-    # step_iterator = custom_progress_step
-
-    regstate = similar(ArrayPartition,T,n)
-
     state = similar(ArrayPartition,T,n)
     drstate = similar(ArrayPartition,T,n)
 
-    init_state = similar(ArrayPartition,T,n)
-    init_drstate = similar(ArrayPartition,T,n)
-
     gauge = similar(ArrayPartition,T,n)
-    speeds = similar(ArrayPartition,T,n)
-    dtstate = similar(ArrayPartition,T,n)
     temp = similar(ArrayPartition,T,n)
 
-    #println("Defining Problem...")
+    param = Param(grid,gauge,drstate,temp)
 
-    param = Param(
-    grid,gauge,speeds,
-    init_state,init_drstate,
-    state,drstate,
-    dtstate,temp)
+    init!(state, param)
 
-    init!(regstate, param)
+    prob = ODEProblem(rhs!, state, tspan, param)
 
-    prob = ODEProblem(rhs!, regstate, tspan, param)
+    #return @benchmark rhs!($dtstate,$regstate, $param, 0.)
 
-    #println("Starting Solution...")
     println("")
-    println("| Time | max ∂ₜγrr | max ∂ₜγθθ | max ∂ₜKrr | max ∂ₜKθθ | max ∂ₜfrrr | max ∂ₜfrθθ |")
-    println("|______|___________|___________|___________|___________|____________|____________|")
-    println("|      |           |           |           |           |            |            |")
+    println("                            Max of time derivatives                            ")
+    println(".-------.-----------.-----------.-----------.-----------.-----------.-----------.")
+    println("| Time  |   ∂ₜγrr   |   ∂ₜγθθ   |   ∂ₜKrr   |   ∂ₜKθθ   |   ∂ₜfrrr  |   ∂ₜfrθθ  |")
+    println(":-------+-----------+-----------+-----------+-----------+-----------+-----------:")
 
-    initial_print(param)
+    integrator = init(prob, alg; dt = dt, adaptive = false, 
+        saveat = save_interval, alias_u0 = true, callback = cb)
 
-    sol = solve(
-        prob, alg,
-        abstol = atol,
-        dt = dt,
-        adaptive = false,
-        saveat = save_interval,
-        alias_u0 = true,
-        tstops = [t for t in tspan[1]:print_interval:tspan[2]],
-        callback = cb
+    tstops = [t for t in tspan[1]:print_interval:tspan[2]][2:end]
+
+    el=@elapsed for (u,t) in TimeChoiceIterator(integrator,tstops) 
+
+        print("| ", rpad(string(round(t,digits=1)),6," "),"|   ")
+        for i in 1:6
+            dudt = maximum((u.x[i] .- integrator.uprev.x[i])/(t - integrator.tprev))
+            print(rpad(string(round(abs(dudt), digits=3)),8," "),"|   ")
+        end
+        println("")
+
+    end
+
+    #el=@elapsed for i in integrator end
+
+    println("'-------'-----------'-----------'-----------'-----------'-----------'-----------'")
+    println("")
+
+    x, s = divrem(el, 60)
+    h, m = divrem(x, 60)
+
+    println("Elapsed Time: ",
+        round(h, digits=2)," h, ",
+        round(m, digits=2)," m, ",
+        round(s, digits=2)," s. "
     )
 
-    solution_saver(T,sol,param)
+    solution_saver(T,integrator.sol,param)
 
     # Print error if one is encountered, with line of occurance
 

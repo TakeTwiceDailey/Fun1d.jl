@@ -73,6 +73,7 @@ end
 # Main parameter struct passed to ODE Solver
 struct Param{T}
     grid::Grid{T}
+    drdr̃samp::Vector{T}
     metric::MetricContainer{T}
     temp::MetricContainer{T}
     state::VarContainer{T}
@@ -110,12 +111,19 @@ function printlogo()
 
 end
 
+# # Sample analytic functions to the grid
+# function sample!(f::Vector{T}, grid::Grid{S}, fun) where {S,T}
+
+#     rmin = grid.domain.rmin
+
+#     f .= T[fun(rmin + dr*(j-1)) for j in 1:(grid.ncells)]
+
+# end
+
 # Sample analytic functions to the grid
 function sample!(f::Vector{T}, grid::Grid{S}, fun) where {S,T}
 
-    rmin = grid.domain.rmin
-
-    f .= T[fun(rmin + dr*(j-1)) for j in 1:(grid.ncells)]
+    f .= T[fun(fr(r̃span[1] + dr̃*(j-1))) for j in 1:(grid.ncells)]
 
 end
 
@@ -309,6 +317,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     temp = param.temp
     #gauge = param.gauge
     metric = param.metric
+    drdr̃ = param.drdr̃samp
 
     # Copy the state into the parameters so that it can be changed
 
@@ -347,6 +356,11 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
     ∇ᵣψr = temp.x[4]
 
     ∇ᵣψr .= (D*(sqrt.(γrr).*γθθ.*ψr  ))./(sqrt.(γrr).*γθθ)
+
+    ∂ᵣ𝜙  ./= drdr̃
+    ∂ᵣψr ./= drdr̃
+    ∂ᵣΠ  ./= drdr̃
+    ∇ᵣψr ./= drdr̃
 
     # Klein-Gordon System
 
@@ -528,6 +542,7 @@ function constraints(regstate::VarContainer{T},param) where T
     state = param.state
     drstate = param.drstate
     metric = param.metric
+    drdr̃ = param.drdr̃samp
 
     α,βʳ,γrr,γθθ,frrr,frθθ = metric.x
 
@@ -541,6 +556,10 @@ function constraints(regstate::VarContainer{T},param) where T
     for i in 1:numvar
         mul!(drstate.x[i],D,state.x[i])
     end
+
+    ∂ᵣ𝜙  ./= drdr̃
+    ∂ᵣψr ./= drdr̃
+    ∂ᵣΠ  ./= drdr̃
 
     # Constraint Equations
 
@@ -599,7 +618,7 @@ function solution_saver(T,sol,param)
 
     array = Array{T,2}(undef,tlen,n)
 
-    r = zeros(T,n); sample!(r, grid, r -> r );
+    r = zeros(T,n); sample!(r, grid, r̃ -> r̃ );
 
     save(string(path,"/coords.h5"), Dict("r"=>r,"t"=>sol.t[:]) )
 
@@ -719,10 +738,13 @@ function main()
     # file.
     ###############################################
 
-    rmin, rmax = rspan
+    r̃min, r̃max = r̃span
 
-    domain = Domain{T}(rmin, rmax)
+    domain = Domain{T}(r̃min, r̃max)
     grid = Grid(domain, n)
+
+    drdr̃samp = zeros(T,n)
+    sample!(drdr̃samp,grid,r̃-> fdrdr̃(fr̃(r̃)))
 
     #atol = eps(T)^(T(3) / 4)
     atol = 10e-12
@@ -745,7 +767,7 @@ function main()
 
     #println("Defining Problem...")
 
-    param = Param(grid,metric,temp,state,drstate,dtstate)
+    param = Param(grid,drdr̃samp,metric,temp,state,drstate,dtstate)
 
     init!(regstate, param)
 
