@@ -20,7 +20,7 @@ using PrettyTables
 
 # Include the input parameter file
 
-include("inputfile.jl")
+include("inputfile_rt.jl")
 
 # Macro for applying get_index to an expression
 # helps to clean up the boundary conditions
@@ -408,21 +408,21 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
 
 ######################################
 
-    cp = @part 1 ( -βʳ + α/sqrt(γrr) )
-    cm = @part 1 ( -βʳ - α/sqrt(γrr) )
+    # cp = @part 1 ( -βʳ + α/sqrt(γrr) )
+    # cm = @part 1 ( -βʳ - α/sqrt(γrr) )
 
-    Up𝜙   = @part 1 ( Π + ψr/sqrt(γrr) )
-    Um𝜙   = @part 1 ( Π - ψr/sqrt(γrr) )
+    # Up𝜙   = @part 1 ( Π + ψr/sqrt(γrr) )
+    # Um𝜙   = @part 1 ( Π - ψr/sqrt(γrr) )
     
-    # Static Dirichlet
-    # Up𝜙b = @part 1 (cm/cp)*Um𝜙
-    # Static Neumann
-    Up𝜙b = @part 1 -(cm/cp)*Um𝜙
+    # # Static Dirichlet
+    # # Up𝜙b = @part 1 (cm/cp)*Um𝜙
+    # # Static Neumann
+    # Up𝜙b = @part 1 -(cm/cp)*Um𝜙
     
-    s1 = cp/Σ[1,1]
+    # s1 = cp/Σ[1,1]
 
-    ∂ₜΠ[1] += s1*(Up𝜙b - Up𝜙)/2
-    ∂ₜψr[1] += s1*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/2
+    # ∂ₜΠ[1] += s1*(Up𝜙b - Up𝜙)/2
+    # ∂ₜψr[1] += s1*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/2
 
 ######################################
 
@@ -468,7 +468,7 @@ function rhs!(dtstate::VarContainer{T},regstate::VarContainer{T}, param::Param{T
      # Static Neumann
     #Um𝜙b = @part n -(cp/cm)*Up𝜙
     #Um𝜙b = Up𝜙 - 2*ψrin/sqrt(γrr[n])
-    Um𝜙b = 0
+    Um𝜙b = -0.01*(m*cos(m*t))/α[n]
 
     sn = -cm/Σ[n,n]
 

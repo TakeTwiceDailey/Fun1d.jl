@@ -19,7 +19,7 @@ const σ44 =  T(5359)/4320
 const σ55 =  T(7877)/8640
 const σ66 =  T(43801)/43200
 
-# The norm is diagonal and symmetric, with the interior
+# The norm is diagonal, with the interior
 # like the identity matrix.
 # Form the 'left' and 'right' blocks of the matrix:
 
@@ -171,24 +171,31 @@ const qr = -ql[end:-1:1,end:-1:1];
 # Define a sparse 7-diagonal 6th order centered finite differencing operator
 Dc = spdiagm(-3=> -1*ones(T,n-3), -2=> 9*ones(T,n-2), -1=> -45*ones(T,n-1),
               1=> 45*ones(T,n-1),  2=>-9*ones(T,n-2),  3=>     ones(T,n-3))/60;
+# Dc = BandedMatrix((-3=> -1*ones(T,n-3), -2=> 9*ones(T,n-2), -1=> -45*ones(T,n-1),
+#               1=> 45*ones(T,n-1),  2=>-9*ones(T,n-2),  3=>     ones(T,n-3)),(n,n),(9,9))/60;
+
 # Overwrite the left and right blocks
 Dc[1:6,1:9] .= ql; Dc[n-5:n,n-8:n] .= qr;
 
 # Define SBP differencing operator
 const D = Dc/dr;
+#const Db = BandedMatrix(Dc/dr);
+
 
 # Norm
 # Form the full sparse norm matrix
-vec = ones(T,n);
-vec[1:6] .= σnl; vec[n-5:n] .= σnr;
+σv = ones(T,n);
+σv[1:6] .= σnl; σv[n-5:n] .= σnr;
 
-const Σ = dr*spdiagm(vec);
+#const Σ = dr*BandedMatrix(0=>σv);
+const Σ = dr*spdiagm(0=>σv);
+#const Σ = BandedMatrix(dr*spdiagm(0=>σv));
 
 # Inverse norm
 # Form the full sparse inverse norm matrix
-const Σi = dr*spdiagm(1 ./vec);
+#const Σi = dr*BandedMatrix(0=>1./σv);
 
-# Complete construction of the dissipation operator
+# Complete construction of the numerical dissipation operator
 
 const a11 = T"-3.1650670378782328375705179866656897941241116565316"
 const a21 = T"9.4952011136346985127115539599970693823723349695948"
@@ -250,6 +257,11 @@ const a76 = T"14.794182781215040752494235291431702472546288897514"
 const a86 = T"-5.9176731124860163009976941165726809890185155590055"
 const a96 = T"0.98627885208100271683294901942878016483641925983425"
 
+# The A_6 numerical dissipation operator is only 
+# different from a 2nd order accurate
+# centered 6th derivative finite differencing operator 
+# at the left and right boundaries
+# Form these 'left' and 'right' blocks:
 const al =  T[ a11 a21 a31 a41 a51 a61 a71 a81 a91 ;
                a12 a22 a32 a42 a52 a62 a72 a82 a92 ;
                a13 a23 a33 a43 a53 a63 a73 a83 a93 ;
@@ -259,20 +271,28 @@ const al =  T[ a11 a21 a31 a41 a51 a61 a71 a81 a91 ;
 
 const ar = al[end:-1:1,end:-1:1];
 
+# Define a sparse 7-diagonal 2nd order centered 
+# 6th derivative finite differencing operator
+# Ac = BandedMatrix((-3=>     ones(T,n-3), -2=> -6*ones(T,n-2), -1=> 15*ones(T,n-1),
+#               0=> -20*ones(T,n),
+#               1=>  15*ones(T,n-1),  2=> -6*ones(T,n-2),  3=>    ones(T,n-3)),(n,n),(9,9));
+
 Ac = spdiagm(-3=>     ones(T,n-3), -2=> -6*ones(T,n-2), -1=> 15*ones(T,n-1),
               0=> -20*ones(T,n),
               1=>  15*ones(T,n-1),  2=> -6*ones(T,n-2),  3=>    ones(T,n-3));
 
 Ac[1:6,1:9] .= al; Ac[n-5:n,n-8:n] .= ar;
 
-const D4 = ε*Ac;
+const A6 = ε*Ac;
+#const A6 = BandedMatrix(ε*Ac);
 
-
-# Averaging operator
+#Averaging operator
 
 
 # Ac = spdiagm(-3=>  -3*ones(T,n-3), -2=> -2*ones(T,n-2), -1=> -1*ones(T,n-1),
 #               1=>     ones(T,n-1),  2=>  2*ones(T,n-2),  3=>  3*ones(T,n-3));
+
+# Ac .*= Dc
 
 # il =  T[ 0  1  2  3  4  5  6  7  8 ;
 #         -1  0  1  2  3  4  5  6  7 ;

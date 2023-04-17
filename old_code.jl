@@ -1,3 +1,31 @@
+    
+    #∂ᵣUmθ = @part n ( ∂ᵣKθθ - ∂ᵣfrθθ/sqrt(γrr) + ∂ᵣγrr*frθθ/sqrt(γrr)^3/2 )
+
+    # Umrb = @part n (-Upr - Umθ*γrr/γθθ - 2*∂ᵣUmθ*sqrt(γrr)/Umθ - γrr/Umθ
+    #      + 8*pi*γrr*γθθ*(ρ - Sr/sqrt(γrr))/Umθ )
+
+    #Transmitting Conditions?
+    #Umrb = Umrin     
+     
+     # frrr = frrri
+        #Uprb = -(Umr - Umri) + Upri
+
+        # ∂ᵣUmθ = @part 1 ∂ᵣKθθ - ∂ᵣfrθθ/sqrt(γrr) + frθθ*(2*frrr - 8*frθθ*γrr/γθθ)/(2*sqrt(γrr)^3)
+        #Uprb = @part 1 (-Umr - γrr*Umθ/γθθ - (2*∂ᵣUmθ*sqrt(γrr) + γrr)/Umθ )
+
+        #∂ᵣUpθ = @part 1 ( ∂ᵣKθθ + ∂ᵣfrθθ/sqrt(γrr) - ∂ᵣγrr*frθθ/sqrt(γrr)^3/2 )
+        #∂ᵣUmθ = @part n ( ∂ᵣKθθ - ∂ᵣfrθθ/sqrt(γrr) + ∂ᵣγrr*frθθ/sqrt(γrr)^3/2 )
+
+        # Uprb = @part 1 (-Umr - Upθ*γrr/γθθ + 2*∂ᵣUpθ*sqrt(γrr)/Upθ - γrr/Upθ
+        #      + 8*pi*γrr*γθθ*(ρ + Sr/sqrt(γrr))/Upθ )
+
+        # Uprb = @part 1 (-Umr - Umθ*γrr/γθθ - 2*∂ᵣUmθ*sqrt(γrr)/Umθ - γrr/Umθ
+        #   + 8*pi*γrr*γθθ*(ρ - Sr/sqrt(γrr))/Umθ )
+
+        #Dirichlet on r-mode
+        #Uprb = @part 1 (cm/cp)*(Umr-(Krri - frrri/sqrt(γrri))) + Krri + frrri/sqrt(γrri)
+
+    
     # Copy the state into the parameters so that it can be changed
 
     #######################

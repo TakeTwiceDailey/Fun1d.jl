@@ -179,8 +179,8 @@ f∂ᵣγθθ(M,r) = ForwardDiff.derivative(r -> fγθθ(M,r), r)
 fKrr(M,∂ₜγrr,r) = -(∂ₜγrr(M,r) - fβʳ(M,r)*f∂ᵣγrr(M,r) - 2*fγrr(M,r)*f∂ᵣβʳ(M,r))/(2*fα(M,r))
 fKθθ(M,∂ₜγθθ,r) = -(∂ₜγθθ(M,r) - fβʳ(M,r)*f∂ᵣγθθ(M,r))/(2*fα(M,r))
 #upper first index
-ffrθθ(M,r) = f∂ᵣγθθ(M,r)/2
-ffrrr(M,r) = (f∂ᵣγrr(M,r) + 8*fγrr(M,r)*ffrθθ(M,r)/fγθθ(M,r))/2
+ffrθθ(M,r) = f∂ᵣγθθ(M,r)/fγrr(M,r)/2
+ffrrr(M,r) = (f∂ᵣγrr(M,r)/fγrr(M,r) + 8*fγrr(M,r)*ffrθθ(M,r)/fγθθ(M,r))/2
 
 # ffrθθ(M,r) = f∂ᵣγθθ(M,r)/2
 # ffrrr(M,r) = (f∂ᵣγrr(M,r) + 8*fγrr(M,r)*ffrθθ(M,r)/fγθθ(M,r))/2
@@ -194,7 +194,7 @@ f∂ᵣfrθθ(M,r)       = ForwardDiff.derivative(r -> ffrθθ(M,r), r)
 f∂ᵣ𝜙(M,r)        = ForwardDiff.derivative(r -> f𝜙(M,r), r)
 
 # Define the initial conditions of the scalar field at t=0
-fψr(M,r) = f∂ᵣ𝜙(M,r)
+fψr(M,r) = f∂ᵣ𝜙(M,r)/fγrr(M,r)
 fΠ(M,r) = -(f∂ₜ𝜙(M,r) - fβʳ(M,r)*f∂ᵣ𝜙(M,r) )/fα(M,r)
 
 
@@ -221,14 +221,14 @@ function initial_conditions!(state::VarContainer{T}, param) where T
 
     Ma,Mb = Ms
 
-    fρ(M,r) = ( fΠ(M,r)^2 + fψr(M,r)^2/fγrr(M,r) + m^2*f𝜙(M,r)^2 )/2.
+    fρ(M,r) = ( fΠ(M,r)^2 + fγrr(M,r)*fψr(M,r)^2 + m^2*f𝜙(M,r)^2 )/2.
     #upper index S^r now
     fSr(M,r) = fψr(M,r)*fΠ(M,r)
     # fρ(M,r) = 0.
     # fSr(M,r) = 0.
 
-    f∂rM(M,r) = 4*pi*r^2*(fρ(M,r) - fβʳ(M,r)*fSr(M,r)/fα(M,r))
-    f∂ₜγrr(M,r) = -8*pi*r*fSr(M,r)/fα(M,r)
+    f∂rM(M,r) = 4*pi*r^2*(fρ(M,r) - fγrr(M,r)*fβʳ(M,r)*fSr(M,r)/fα(M,r))
+    f∂ₜγrr(M,r) = -8*pi*r*fγrr(M,r)*fSr(M,r)/fα(M,r)
     f∂ₜγθθ(M,r) = 0.
 
     # Constraint Solver
@@ -272,13 +272,21 @@ function initial_conditions!(state::VarContainer{T}, param) where T
 
     # Sample initial values of the r characteristics
 
-    global Upri1 = @part 1 Krr + frrr/sqrt(γrr)
-    global Umri1 = @part 1 Krr - frrr/sqrt(γrr)
+    global Upri1 = @part 1  Krr + frrr*sqrt(γrr)
+    global Umri1 = @part 1 -Krr + frrr*sqrt(γrr)
 
-    global Uprin = @part n Krr + frrr/sqrt(γrr)
-    global Umrin = @part n Krr - frrr/sqrt(γrr)
-    global Upθin = @part n Kθθ + frθθ/sqrt(γrr)
-    global Umθin = @part n Kθθ - frθθ/sqrt(γrr)
+    global Uprin = @part n  Krr + frrr*sqrt(γrr)
+    global Umrin = @part n -Krr + frrr*sqrt(γrr)
+    global Upθin = @part n  Kθθ + frθθ*sqrt(γrr)
+    global Umθin = @part n -Kθθ + frθθ*sqrt(γrr)
+
+    # global Upri1 = @part 1 Krr + frrr/sqrt(γrr)
+    # global Umri1 = @part 1 Krr - frrr/sqrt(γrr)
+
+    # global Uprin = @part n Krr + frrr/sqrt(γrr)
+    # global Umrin = @part n Krr - frrr/sqrt(γrr)
+    # global Upθin = @part n Kθθ + frθθ/sqrt(γrr)
+    # global Umθin = @part n Kθθ - frθθ/sqrt(γrr)
 
     global is_AH = any(@. (Kθθ - frθθ/sqrt(γrr)) > 0)
 
@@ -331,7 +339,6 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     # about ~40% of runtime is derivatives
 
     Threads.@threads for i in 1:numvar mul!(drstate.x[i],D,state.x[i]) end
-    #Threads.@threads for i in 1:numvar drstate.x[i] .= D*state.x[i] end
 
     @. rootγ = sqrt(γrr)*γθθ
 
@@ -348,11 +355,17 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
 
     ρ = temp.x[4]; Sr = temp.x[5]; Tt = temp.x[6]; Srr = temp.x[7]; Sθθ = temp.x[8];
 
-    @. ρ = ( Π^2 + ψr^2/γrr + (m^2)*𝜙^2)/2 # Energy Density
+    @. ρ = ( Π^2 + γrr*ψr^2 + (m^2)*𝜙^2)/2 # Energy Density
     @. Sr = ψr*Π  # Momentum Density (upper index)
-    @. Tt = Π^2 - ψr^2/γrr - 2*(m^2)*𝜙^2  # Trace of the Stress-Energy tensor (T unavailable)
-    @. Srr = γrr*( Π^2 + ψr^2/γrr - (m^2)*𝜙^2)/2  # Radial pressure component
-    @. Sθθ = γθθ*( Π^2 - ψr^2/γrr - (m^2)*𝜙^2)/2  # Angular pressure component
+    @. Tt = Π^2 - γrr*ψr^2 - 2*(m^2)*𝜙^2  # Trace of the Stress-Energy tensor (T unavailable)
+    @. Srr = γrr*( Π^2 + γrr*ψr^2 - (m^2)*𝜙^2)/2  # Radial pressure component
+    @. Sθθ = γθθ*( Π^2 - γrr*ψr^2 - (m^2)*𝜙^2)/2  # Angular pressure component
+
+    # @. ρ = ( Π^2 + ψr^2/γrr + (m^2)*𝜙^2)/2 # Energy Density
+    # @. Sr = ψr*Π  # Momentum Density (upper index)
+    # @. Tt = Π^2 - ψr^2/γrr - 2*(m^2)*𝜙^2  # Trace of the Stress-Energy tensor (T unavailable)
+    # @. Srr = γrr*( Π^2 + ψr^2/γrr - (m^2)*𝜙^2)/2  # Radial pressure component
+    # @. Sθθ = γθθ*( Π^2 - ψr^2/γrr - (m^2)*𝜙^2)/2  # Angular pressure component
 
     # Calculate lapse, may be different at every step.
     @. α = ᾶ*γθθ*sqrt(γrr)
@@ -375,46 +388,54 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
 
     @. ∂ₜγθθ = βʳ*∂ᵣγθθ - 2*α*Kθθ
 
-    @. ∂ₜKrr  = ( βʳ*∂ᵣKrr - α*∇ᵣfrrr/γrr + 3*α*frrr^2/γrr^2 - 6*α*frθθ^2/γθθ^2
-     - α*Krr^2/γrr + 2*α*Krr*Kθθ/γθθ - 10*α*frrr*frθθ/(γrr*γθθ)
-     - α*frrr*∂ᵣlnᾶ/γrr - α*∂ᵣlnᾶ^2 - α*∂ᵣ2lnᾶ + 2*∂ᵣβʳ*Krr )
+    @. ∂ₜKrr  = ( βʳ*∂ᵣKrr - α*∇ᵣfrrr + α*frrr^2 - 6*α*(γrr*frθθ/γθθ)^2
+     - α*Krr^2/γrr + 2*α*Krr*Kθθ/γθθ - 2*α*γrr*frrr*frθθ/γθθ
+     - α*frrr*∂ᵣlnᾶ - α*∂ᵣlnᾶ^2 - α*∂ᵣ2lnᾶ + 2*∂ᵣβʳ*Krr )
 
-    @. ∂ₜKθθ  = ( βʳ*∂ᵣKθθ - α*∇ᵣfrθθ/γrr + α + α*Krr*Kθθ/γrr
-     + α*frrr*frθθ/γrr^2 - 4*α*frθθ^2/(γrr*γθθ) - α*frθθ*∂ᵣlnᾶ/γrr )
+    @. ∂ₜKθθ  = ( βʳ*∂ᵣKθθ - α*∇ᵣfrθθ + α + α*Krr*Kθθ/γrr
+     - α*frrr*frθθ + 4*α*γrr*frθθ^2/γθθ - α*frθθ*∂ᵣlnᾶ )
 
-    @. ∂ₜfrrr = ( βʳ*∂ᵣfrrr - α*∂ᵣKrr - α*frrr*Krr/γrr
+    @. ∂ₜfrrr = ( βʳ*∂ᵣfrrr - α*∂ᵣKrr/γrr + α*frrr*Krr/γrr
      + 12*α*frθθ*Kθθ*γrr/γθθ^2 - 10*α*frθθ*Krr/γθθ - 4*α*frrr*Kθθ/γθθ
-     - α*Krr*∂ᵣlnᾶ - 4*α*Kθθ*γrr*∂ᵣlnᾶ/γθθ + 3*∂ᵣβʳ*frrr + γrr*∂ᵣ2βʳ )
+     - α*Krr*∂ᵣlnᾶ/γrr - 4*α*Kθθ*∂ᵣlnᾶ/γθθ + ∂ᵣβʳ*frrr + ∂ᵣ2βʳ )
 
-    @. ∂ₜfrθθ = ( βʳ*∂ᵣfrθθ - α*∂ᵣKθθ - α*frrr*Kθθ/γrr + 2*α*frθθ*Kθθ/γθθ
-     - α*Kθθ*∂ᵣlnᾶ + ∂ᵣβʳ*frθθ )
+    @. ∂ₜfrθθ = ( βʳ*∂ᵣfrθθ - α*∂ᵣKθθ/γrr + 2*α*frθθ*Krr/γrr + 2*α*frθθ*Kθθ/γθθ
+     - α*frrr*Kθθ/γrr - α*Kθθ*∂ᵣlnᾶ/γrr - ∂ᵣβʳ*frθθ )
 
-    #@. ∂ₜγrr = βʳ*∂ᵣγrr + 2*∂ᵣβʳ*γrr - 2*α*Krr
+    #  @. ∂ₜγrr = βʳ*∂ᵣγrr + 2*∂ᵣβʳ*γrr - 2*α*Krr
 
-    # @. ∂ₜγθθ = βʳ*∂ᵣγθθ - 2*α*Kθθ
-
-    # @. ∂ₜKrr  = ( βʳ*∂ᵣKrr - α*∇ᵣfrrr/γrr + 3*α*frrr^2/γrr^2 - 6*α*frθθ^2/γθθ^2
-    # - α*Krr^2/γrr + 2*α*Krr*Kθθ/γθθ - 10*α*frrr*frθθ/(γrr*γθθ)
-    # - α*frrr*∂ᵣlnᾶ/γrr - α*∂ᵣlnᾶ^2 - α*∂ᵣ2lnᾶ + 2*∂ᵣβʳ*Krr )
-
-    # @. ∂ₜKθθ  = ( βʳ*∂ᵣKθθ - α*∇ᵣfrθθ/γrr + α + α*Krr*Kθθ/γrr
-    # + α*frrr*frθθ/γrr^2 - 4*α*frθθ^2/(γrr*γθθ) - α*frθθ*∂ᵣlnᾶ/γrr )
-
-    # @. ∂ₜfrrr = ( βʳ*∂ᵣfrrr - α*∂ᵣKrr - α*frrr*Krr/γrr
-    # + 12*α*frθθ*Kθθ*γrr/γθθ^2 - 10*α*frθθ*Krr/γθθ - 4*α*frrr*Kθθ/γθθ
-    # - α*Krr*∂ᵣlnᾶ - 4*α*Kθθ*γrr*∂ᵣlnᾶ/γθθ + 3*∂ᵣβʳ*frrr + γrr*∂ᵣ2βʳ )
-
-    # @. ∂ₜfrθθ = ( βʳ*∂ᵣfrθθ - α*∂ᵣKθθ - α*frrr*Kθθ/γrr + 2*α*frθθ*Kθθ/γθθ
-    # - α*Kθθ*∂ᵣlnᾶ + ∂ᵣβʳ*frθθ )
+    #  @. ∂ₜγθθ = βʳ*∂ᵣγθθ - 2*α*Kθθ
+ 
+    #  @. ∂ₜKrr  = ( βʳ*∂ᵣKrr - α*∇ᵣfrrr/γrr + 3*α*frrr^2/γrr^2 - 6*α*frθθ^2/γθθ^2
+    #   - α*Krr^2/γrr + 2*α*Krr*Kθθ/γθθ - 10*α*frrr*frθθ/(γrr*γθθ)
+    #   - α*frrr*∂ᵣlnᾶ/γrr - α*∂ᵣlnᾶ^2 - α*∂ᵣ2lnᾶ + 2*∂ᵣβʳ*Krr )
+ 
+    #  @. ∂ₜKθθ  = ( βʳ*∂ᵣKθθ - α*∇ᵣfrθθ/γrr + α + α*Krr*Kθθ/γrr
+    #   + α*frrr*frθθ/γrr^2 - 4*α*frθθ^2/(γrr*γθθ) - α*frθθ*∂ᵣlnᾶ/γrr )
+ 
+    #  @. ∂ₜfrrr = ( βʳ*∂ᵣfrrr - α*∂ᵣKrr - α*frrr*Krr/γrr
+    #   + 12*α*frθθ*Kθθ*γrr/γθθ^2 - 10*α*frθθ*Krr/γθθ - 4*α*frrr*Kθθ/γθθ
+    #   - α*Krr*∂ᵣlnᾶ - 4*α*Kθθ*γrr*∂ᵣlnᾶ/γθθ + 3*∂ᵣβʳ*frrr + γrr*∂ᵣ2βʳ )
+ 
+    #  @. ∂ₜfrθθ = ( βʳ*∂ᵣfrθθ - α*∂ᵣKθθ - α*frrr*Kθθ/γrr + 2*α*frθθ*Kθθ/γθθ
+    #   - α*Kθθ*∂ᵣlnᾶ + ∂ᵣβʳ*frθθ )
 
     # Klein-Gordon System
 
     @. ∂ₜ𝜙 = βʳ*∂ᵣ𝜙 - α*Π
 
-    @. ∂ₜψr =  βʳ*∂ᵣψr - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣlnᾶ)*Π + ∂ᵣβʳ*ψr
+    @. ∂ₜψr = ( βʳ*∂ᵣψr - α*∂ᵣΠ - α*(frrr - 2*γrr*frθθ/γθθ + ∂ᵣlnᾶ)*Π/γrr 
+        + ∂ᵣβʳ*ψr + 2*α*Krr*ψr/γrr )
 
-    @. ∂ₜΠ = ( βʳ*∂ᵣΠ - α*∇ᵣψr/γrr + α*(Krr/γrr + 2*Kθθ/γθθ)*Π
-    + α*(frrr/γrr - 6*frθθ/γθθ - ∂ᵣlnᾶ)*ψr/γrr + m^2*α*𝜙 )
+    @. ∂ₜΠ = ( βʳ*∂ᵣΠ - α*∇ᵣψr + α*(Krr/γrr + 2*Kθθ/γθθ)*Π
+    - α*(frrr - 2*γrr*frθθ/γθθ + ∂ᵣlnᾶ)*ψr + m^2*α*𝜙 )
+
+    # @. ∂ₜ𝜙 = βʳ*∂ᵣ𝜙 - α*Π
+
+    # @. ∂ₜψr =  βʳ*∂ᵣψr - α*∂ᵣΠ - α*(frrr/γrr - 2*frθθ/γθθ + ∂ᵣlnᾶ)*Π + ∂ᵣβʳ*ψr
+
+    # @. ∂ₜΠ = ( βʳ*∂ᵣΠ - α*∇ᵣψr/γrr + α*(Krr/γrr + 2*Kθθ/γθθ)*Π
+    # + α*(frrr/γrr - 6*frθθ/γθθ - ∂ᵣlnᾶ)*ψr/γrr + m^2*α*𝜙 )
 
     # Source terms to GR
 
@@ -422,27 +443,55 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     @. ∂ₜKθθ  += 4*pi*α*(γθθ*Tt - 2*Sθθ)
     @. ∂ₜfrrr += 16*pi*α*γrr*Sr
 
-    # Determines if there is an Apparent Horizon
-    global is_AH = any(@. (Kθθ - frθθ/sqrt(γrr)) > 0)
+    # @. ∂ₜKrr  += 4*pi*α*(γrr*Tt - 2*Srr)
+    # @. ∂ₜKθθ  += 4*pi*α*(γθθ*Tt - 2*Sθθ)
+    # @. ∂ₜfrrr += 16*pi*α*γrr*Sr
+
+    # Calculates the Apparent Horizon, if there is one
+    # in the domain, no inner boundary conditions are applied
+
+    # AH = temp.x[9]
+    # @. AH = Kθθ - frθθ/sqrt(γrr)
+    # is_AH = false
+    # for i in 1:n-1 
+    #     if AH[i]*AH[i+1] <= 0. 
+    #         is_AH = true
+    #         break
+    #     end 
+    # end
+
+    ###################################
+    global is_AH = any(@. (Kθθ - frθθ*sqrt(γrr)) > 0)
 
     # #EM = 4*pi*dr*sum(A*(σv.*((frθθ.*ρ .- Kθθ.*Sr).*sqrt.(γθθ))))
 
     # # Define characteristic variables at r=a
+    Umθ = @part 1 ( -Kθθ + sqrt(γrr)*frθθ )
+    Upθ = @part 1 (  Kθθ + sqrt(γrr)*frθθ )
 
-    Umθ = @part 1 ( Kθθ - frθθ/sqrt(γrr) )
-    Upθ = @part 1 ( Kθθ + frθθ/sqrt(γrr) )
+    Umr = @part 1 ( -Krr + sqrt(γrr)*frrr )
+    Upr = @part 1 (  Krr + sqrt(γrr)*frrr )
 
-    Umr = @part 1 ( Krr - frrr/sqrt(γrr) )
-    Upr = @part 1 ( Krr + frrr/sqrt(γrr) )
+    Um𝜙 = @part 1 ( -Π + sqrt(γrr)*ψr )
+    Up𝜙 = @part 1 (  Π + sqrt(γrr)*ψr )
 
-    Up𝜙 = @part 1 ( Π + ψr/sqrt(γrr) )
-    Um𝜙 = @part 1 ( Π - ψr/sqrt(γrr) )
-
-    cp = @part 1 -βʳ + ᾶ*γθθ
     cm = @part 1 -βʳ - ᾶ*γθθ
+    cp = @part 1 -βʳ + ᾶ*γθθ
+    # Umθ = @part 1 ( Kθθ - frθθ/sqrt(γrr) )
+    # Upθ = @part 1 ( Kθθ + frθθ/sqrt(γrr) )
+
+    # Umr = @part 1 ( Krr - frrr/sqrt(γrr) )
+    # Upr = @part 1 ( Krr + frrr/sqrt(γrr) )
+
+    # Up𝜙 = @part 1 ( Π + ψr/sqrt(γrr) )
+    # Um𝜙 = @part 1 ( Π - ψr/sqrt(γrr) )
+
+    # cp = @part 1 -βʳ + ᾶ*γθθ
+    # cm = @part 1 -βʳ - ᾶ*γθθ
 
     # BC on angular characteristics
-    Upθb = @part 1 ((2*Ma*sqrt(γθθ) - γθθ)/Umθ)
+    Upθb = @part 1 ((γθθ - 2*M0*sqrt(γθθ))/Umθ)
+    #Upθb = @part 1 ((2*Ma*sqrt(γθθ) - γθθ)/Umθ)
 
     # if !(is_AH)
     #     # BC on scalar characteristics
@@ -458,29 +507,29 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     # end
 
     # BC on scalar characteristics
-    Up𝜙b = @part 1 ka*sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
+    Up𝜙b = @part 1 ka*sqrt(-(cm*Upθb)/(cp*Umθ))*Um𝜙
     # Mass evolution at r=a
-    #∂ₜMs[1] = @part 1 -pi*cm*sqrt(γrr*γθθ)*(1-ka^2)*Upθb*Um𝜙^2
+    ∂ₜMs[1] = @part 1 -pi*cm*sqrt(γrr*γθθ)*(1-ka^2)*Upθb*Um𝜙^2
 
     # BC on radial characteristics
     # Uprb = Upri
     # Krr = Krri
- 
+    Uprb = Umr - Umri1 + Upri1
     # # BC on angular characteristics
     # Upθb = @part 1 ((2*Ma*sqrt(γθθ) - γθθ)/Umθ)
 
-    if !(is_AH)
-        # BC on scalar characteristics
-        Up𝜙b = @part 1 ka*sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
-        # Mass evolution at r=a
-        ∂ₜMs[1] = @part 1 -pi*cm*sqrt(γrr*γθθ)*(1-ka^2)*Upθb*Um𝜙^2
-    else 
-        # BC on scalar characteristics
-        Up𝜙b = 0
-        # Mass evolution at r=a
-        #∂ₜMs[1] = @part 1 -pi*cm*sqrt(γrr*γθθ)*Upθb*Um𝜙^2
-        ∂ₜMs[1] = @part 1 -pi*cm*sqrt(γrr*γθθ)*Upθb*Um𝜙^2
-    end
+    # # if !(is_AH)
+    # #     # BC on scalar characteristics
+    # #     Up𝜙b = @part 1 ka*sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
+    # #     # Mass evolution at r=a
+    # #     ∂ₜMs[1] = @part 1 -pi*cm*sqrt(γrr*γθθ)*(1-ka^2)*Upθb*Um𝜙^2
+    # # else 
+    # #     # BC on scalar characteristics
+    # #     Up𝜙b = 0
+    # #     # Mass evolution at r=a
+    # #     #∂ₜMs[1] = @part 1 -pi*cm*sqrt(γrr*γθθ)*Upθb*Um𝜙^2
+    # #     ∂ₜMs[1] = @part 1 -pi*cm*sqrt(γrr*γθθ)*Upθb*Um𝜙^2
+    # # end
 
     # # BC on scalar characteristics
     # Up𝜙b = @part 1 ka*sqrt((cm*Upθb)/(cp*Umθ))*Um𝜙
@@ -490,9 +539,9 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     # # BC on radial characteristics
     # # Uprb = Upri
     # # Krr = Krri
-    Uprb = -(Umr - Umri1) + Upri1
+    # Uprb = -(Umr - Umri1) + Upri1
 
-    if cp > 0 && !(is_AH)
+    if cp > 0
 
         ## Applies Inner Boundary Conditions
 
@@ -501,34 +550,64 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
 
         # SAT boundary application
         ∂ₜΠ[1]    += s1*(Up𝜙b - Up𝜙)/2
-        ∂ₜψr[1]   += s1*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/2
+        ∂ₜψr[1]   += s1*(Up𝜙b - Up𝜙)/sqrt(γrr[1])/2
 
         ∂ₜKrr[1]  += s1*(Uprb - Upr)/2
-        ∂ₜfrrr[1] += s1*sqrt(γrr[1])*(Uprb - Upr)/2
+        ∂ₜfrrr[1] += s1*(Uprb - Upr)/sqrt(γrr[1])/2
 
         ∂ₜKθθ[1]  += s1*(Upθb - Upθ)/2
-        ∂ₜfrθθ[1] += s1*sqrt(γrr[1])*(Upθb - Upθ)/2
+        ∂ₜfrθθ[1] += s1*(Upθb - Upθ)/sqrt(γrr[1])/2
 
     end
+    # if cp > 0
+
+    #     ## Applies Inner Boundary Conditions
+
+    #     #SAT strength
+    #     s1 = abs(cp)/Σ[1,1]
+
+    #     # SAT boundary application
+    #     ∂ₜΠ[1]    += s1*(Up𝜙b - Up𝜙)/2
+    #     ∂ₜψr[1]   += s1*sqrt(γrr[1])*(Up𝜙b - Up𝜙)/2
+
+    #     ∂ₜKrr[1]  += s1*(Uprb - Upr)/2
+    #     ∂ₜfrrr[1] += s1*sqrt(γrr[1])*(Uprb - Upr)/2
+
+    #     ∂ₜKθθ[1]  += s1*(Upθb - Upθ)/2
+    #     ∂ₜfrθθ[1] += s1*sqrt(γrr[1])*(Upθb - Upθ)/2
+
+    # end
     # ## Outer Boundary Conditions
 
     # # Define characteristic variables at r=b
+    Umθ = @part n ( -Kθθ + sqrt(γrr)*frθθ )
+    Upθ = @part n (  Kθθ + sqrt(γrr)*frθθ )
+
+    Umr = @part n ( -Krr + sqrt(γrr)*frrr )
+    Upr = @part n (  Krr + sqrt(γrr)*frrr )
+
+    Um𝜙 = @part n ( -Π + sqrt(γrr)*ψr )
+    Up𝜙 = @part n (  Π + sqrt(γrr)*ψr )
+
+    cm = @part n -βʳ - ᾶ*γθθ
+    cp = @part n -βʳ + ᾶ*γθθ
 
     # # Define characteristic variables now at r=b
-    Umθ = @part n ( Kθθ - frθθ/sqrt(γrr) )
-    Upθ = @part n ( Kθθ + frθθ/sqrt(γrr) )
+    # Umθ = @part n ( Kθθ - frθθ/sqrt(γrr) )
+    # Upθ = @part n ( Kθθ + frθθ/sqrt(γrr) )
 
-    Umr = @part n ( Krr - frrr/sqrt(γrr) )
-    Upr = @part n ( Krr + frrr/sqrt(γrr) )
+    # Umr = @part n ( Krr - frrr/sqrt(γrr) )
+    # Upr = @part n ( Krr + frrr/sqrt(γrr) )
 
-    Up𝜙 = @part n ( Π + ψr/sqrt(γrr) )
-    Um𝜙 = @part n ( Π - ψr/sqrt(γrr) )
+    # Up𝜙 = @part n ( Π + ψr/sqrt(γrr) )
+    # Um𝜙 = @part n ( Π - ψr/sqrt(γrr) )
 
-    cp = @part n -βʳ + ᾶ*γθθ
-    cm = @part n -βʳ - ᾶ*γθθ
+    # cp = @part n -βʳ + ᾶ*γθθ
+    # cm = @part n -βʳ - ᾶ*γθθ
 
     # # BC on angular characteristics
-    Umθb = @part n ((2*Mb*sqrt(γθθ) - γθθ)/Upθ)
+    Umθb = @part n ((γθθ - 2*Mtot*sqrt(γθθ))/Upθ)
+    # Umθb = @part n ((2*Mb*sqrt(γθθ) - γθθ)/Upθ)
 
     # #Boundary injection model
     # # cm = @part n -βʳ - ᾶ*γθθ
@@ -549,37 +628,59 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     # #Um𝜙 = @part n ( -(∂ₜ𝜙-βʳ*ψr)/α - ψr/sqrt(γrr) )
 
     # # BC on scalar characteristics
-    Um𝜙b = @part n kb*sqrt((cp*Umθb)/(cm*Upθ))*Up𝜙
+    Um𝜙b = @part n kb*sqrt(-(cp*Umθb)/(cm*Upθ))*Up𝜙
 
     # # BC on radial characteristics
-    Umrb = -(Upr - Uprin) + Umrin
+    Umrb = Upr + Umrin - Uprin
+    #Umrb = -(Upr - Uprin) + Umrin
 
-    # Mass evolution at r=b
-    ∂ₜMs[2] = @part n pi*cp*sqrt(γrr*γθθ)*(1-kb^2)*Umθb*Up𝜙^2
+    ∂ₜMs[2] = @part n -pi*cp*sqrt(γrr*γθθ)*(1-kb^2)*Umθb*Up𝜙^2
+
+    # # Mass evolution at r=b
+    # #∂ₜMs[2] = @part n pi*cp*sqrt(γrr*γθθ)*(1-kb^2)*Umθb*Up𝜙^2
+    # #∂ₜMs[2] = @part 1 -pi*cm*sqrt(γrr*γθθ)*(1-ka^2)*Upθb*Um𝜙^2
 
     # Application of constraint BCs
-    @part n ∂ₜγrr = ( (2*frrr - 8*frθθ*γrr/γθθ)*βʳ + 2*∂ᵣβʳ*γrr - 2*α*Krr )
-    @part n ∂ₜγθθ = ( 2*frθθ*βʳ - 2*α*Kθθ )
-    @part n ∂ₜ𝜙   = (βʳ*ψr - α*Π)
+    @part n ∂ₜγrr = ( γrr*(2*frrr - 8*frθθ*γrr/γθθ)*βʳ + 2*∂ᵣβʳ*γrr - 2*α*Krr )
+    @part n ∂ₜγθθ = ( 2*γrr*frθθ*βʳ - 2*α*Kθθ )
+    @part n ∂ₜ𝜙   = (γrr*βʳ*ψr - α*Π)
 
     #SAT strength
     sn = abs(cm)/Σ[n,n]
 
     # SAT boundary application
-    ∂ₜΠ[n]    +=  sn*(Um𝜙b - Um𝜙)/2
-    ∂ₜψr[n]   += -sn*sqrt(γrr[n])*(Um𝜙b - Um𝜙)/2
+    ∂ₜΠ[n]    += -sn*(Um𝜙b - Um𝜙)/2
+    ∂ₜψr[n]   +=  sn*(Um𝜙b - Um𝜙)/sqrt(γrr[n])/2
 
-    ∂ₜKrr[n]  +=  sn*(Umrb - Umr)/2
-    ∂ₜfrrr[n] += -sn*sqrt(γrr[n])*(Umrb - Umr)/2
+    ∂ₜKrr[n]  += -sn*(Umrb - Umr)/2
+    ∂ₜfrrr[n] +=  sn*(Umrb - Umr)/sqrt(γrr[n])/2
 
-    ∂ₜKθθ[n]  +=  sn*(Umθb - Umθ)/2
-    ∂ₜfrθθ[n] += -sn*sqrt(γrr[n])*(Umθb - Umθ)/2
+    ∂ₜKθθ[n]  += -sn*(Umθb - Umθ)/2
+    ∂ₜfrθθ[n] +=  sn*(Umθb - Umθ)/sqrt(γrr[n])/2
 
-    #Add the numerical dissipation to dtstate
-    #about ~30% of runtime is dissipation
+
+    # # Application of constraint BCs
+    # @part n ∂ₜγrr = ( (2*frrr - 8*frθθ*γrr/γθθ)*βʳ + 2*∂ᵣβʳ*γrr - 2*α*Krr )
+    # @part n ∂ₜγθθ = ( 2*frθθ*βʳ - 2*α*Kθθ )
+    # @part n ∂ₜ𝜙   = (βʳ*ψr - α*Π)
+
+    # #SAT strength
+    # sn = abs(cm)/Σ[n,n]
+
+    # # SAT boundary application
+    # ∂ₜΠ[n]    += sn*(Um𝜙b - Um𝜙)/2
+    # ∂ₜψr[n]   += -sn*sqrt(γrr[n])*(Um𝜙b - Um𝜙)/2
+
+    # ∂ₜKrr[n]  += sn*(Umrb - Umr)/2
+    # ∂ₜfrrr[n] += -sn*sqrt(γrr[n])*(Umrb - Umr)/2
+
+    # ∂ₜKθθ[n]  += sn*(Umθb - Umθ)/2
+    # ∂ₜfrθθ[n] += -sn*sqrt(γrr[n])*(Umθb - Umθ)/2
+
+    # Add the numerical dissipation to dtstate
+    # about ~30% of runtime is dissipation
 
     Threads.@threads for i in 1:numvar mul!(dtstate.x[i],A6,state.x[i],1,1) end
-    #Threads.@threads for i in 1:numvar dtstate.x[i] .+= A6*state.x[i] end
     # this syntax is equivalent to dtstate.x[i] .+= D4*state.x[i]
 
     # catch any errors, save them to print later
@@ -619,7 +720,7 @@ function constraints(state::VarContainer{T},param) where T
     # Calculate source terms
     ρ = temp.x[1]; Sr = temp.x[2]
 
-    @. ρ = (Π^2 + ψr^2/γrr + (m^2)*𝜙^2)/2.
+    @. ρ = (Π^2 + γrr*ψr^2 + (m^2)*𝜙^2)/2.
     @. Sr = ψr*Π
 
     # Constraint Equations
@@ -627,17 +728,27 @@ function constraints(state::VarContainer{T},param) where T
     C = zeros(T,n); Cr = zeros(T,n); Crrr = zeros(T,n); Crθθ = zeros(T,n);
     C𝜙 = zeros(T,n);
 
+    @. C = (∂ᵣfrθθ/γθθ - 9*γrr*frθθ^2/(2*γθθ^2) + frrr*frθθ/γθθ
+     - Kθθ^2/(2*γθθ^2) - 1/(2*γθθ) - Krr*Kθθ/(γrr*γθθ) + 4*pi*ρ)
 
-    @. C = (∂ᵣfrθθ/(γθθ*γrr) + 7*frθθ^2/(2*γrr*γθθ^2) - frrr*frθθ/(γrr^2*γθθ)
-    - Kθθ^2/(2*γθθ^2) - 1/(2*γθθ) - Krr*Kθθ/(γrr*γθθ) + 4*pi*ρ)
+    @. Cr = (∂ᵣKθθ/γθθ/γrr - frθθ*Kθθ/γθθ^2 - frθθ*Krr/(γθθ*γrr) + 4*pi*Sr)
 
-    @. Cr = (∂ᵣKθθ/γθθ - frθθ*Kθθ/γθθ^2 - frθθ*Krr/(γθθ*γrr) + 4*pi*Sr)
+    @. Crrr = ∂ᵣγrr + 8*frθθ*γrr^2/γθθ - 2*γrr*frrr
 
-    @. Crrr = ∂ᵣγrr + 8*frθθ*γrr/γθθ - 2*frrr
+    @. Crθθ = ∂ᵣγθθ - 2*γrr*frθθ
 
-    @. Crθθ = ∂ᵣγθθ - 2*frθθ
+    @. C𝜙 = ∂ᵣ𝜙 - γrr*ψr
 
-    @. C𝜙 = ∂ᵣ𝜙 - ψr
+#     @. C = (∂ᵣfrθθ/(γθθ*γrr) + 7*frθθ^2/(2*γrr*γθθ^2) - frrr*frθθ/(γrr^2*γθθ)
+#     - Kθθ^2/(2*γθθ^2) - 1/(2*γθθ) - Krr*Kθθ/(γrr*γθθ) + 4*pi*ρ)
+
+#    @. Cr = (∂ᵣKθθ/γθθ - frθθ*Kθθ/γθθ^2 - frθθ*Krr/(γθθ*γrr) + 4*pi*Sr)
+
+#    @. Crrr = ∂ᵣγrr + 8*frθθ*γrr/γθθ - 2*frrr
+
+#    @. Crθθ = ∂ᵣγθθ - 2*frθθ
+
+#    @. C𝜙 = ∂ᵣ𝜙 - ψr
 
     Γ = spdiagm(sqrt.(γrr).*γθθ)
     W = Σ*Γ;
@@ -663,8 +774,7 @@ function solution_saver(T,sol,param)
                     "_rspan=", round.(rspan, digits=2),
                     "_tspan=", round.(tspan, digits=2),
                     "_CFL=",   round(CFL, digits=2),
-                    "_Mtot=",  round(Mtot, digits=2),
-                    "_s=",  round(σr, digits=2)
+                    "_Mtot=",  round(Mtot, digits=2)
                     )
 
     path = string("data/",folder)
@@ -742,11 +852,11 @@ end
 AH(state,t,integrator) = is_AH
 
 # Terminates the integrator when error_handler returns true
-cb = DiscreteCallback(error_handler,terminate!,save_positions=(false,false))
+cbe = DiscreteCallback(error_handler,terminate!,save_positions=(false,false))
 
-# cbah = DiscreteCallback(AH,terminate!,save_positions=(false,false))
+cbah = DiscreteCallback(AH,terminate!,save_positions=(false,false))
 
-# cb = CallbackSet(cbe,cbah)
+cb = CallbackSet(cbe,cbah)
 
 function main()
 
@@ -825,7 +935,7 @@ function main()
             print(rpad(string(round(abs(dudt), digits=3)),8," "),"|   ")
         end
         println("")
-        if !(typeof(global_error.error) == NothingException) break end
+        if !(typeof(global_error.error) == NothingException) || is_AH break end
     end
 
     println("'-------'-----------'-----------'-----------'-----------'-----------'-----------'")

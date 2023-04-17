@@ -15,11 +15,11 @@ end
 const M0 = T"1.";
 
 # Number of grid points
-const n = 32001;
+const n = 1001;
 
 # Spatial coordinate domain span in units of M0
 
-const rspan = T[T"2.01",T"6.0"];
+const rspan = T[T"1.0",T"11.0"];
 
 # const C =  M0*(rspan[2]+2*M0)/(rspan[2]-2*M0)
 
@@ -38,20 +38,22 @@ const CFL::T = 4;
 # Spatial interval size
 const dr̃ = T((r̃span[2]-r̃span[1])/(n-1));
 
+const dr = dr̃
+
 # Temporal interval size
 const dt = dr̃/(CFL)::T;
 
 # Temporal coordinate span in units of M0
-const tspan = T[T"0.", T"20."];
+const tspan = T[T"0.", T"500."];
 
 # Interval between prints to the screen in units of M0
-const print_interval = T"1.0";
+const print_interval = T"5.0";
 
 # Interval to save the state in units of M0
 const save_interval = T"0.1";
 
 # Mass of scalar field
-const m = T"0.";
+const m = T"0.01";
 
 # Initial conditions on the scalar field
 # Here is a pulse with amplitude A, total width 2*σr, and location r0
@@ -61,8 +63,9 @@ const Amp  = T"0.001";
 #const Amp  = T"0.0";
 const p = 4;
 
-f𝜙(M,r) = (r0-σr)<r<(r0+σr) ? (Amp/r)*(r-(r0-σr))^p*(r-(r0+σr))^p/σr^(2*p) : 0
+#f𝜙(M,r) = (r0-σr)<r<(r0+σr) ? (Amp/r)*(r-(r0-σr))^p*(r-(r0+σr))^p/σr^(2*p) : 0
 #f𝜙(M,r) = (Amp/r)*exp(-((r-r0)/(σr/4))^2)
+f𝜙(M,r) = 0
 
 #k=4.948926441009052
 #f𝜙(M,r) = (Amp/r)*sin(k*(pi/2)*(r-rspan[1])/(rspan[2]-rspan[1]))
@@ -70,9 +73,11 @@ f𝜙(M,r) = (r0-σr)<r<(r0+σr) ? (Amp/r)*(r-(r0-σr))^p*(r-(r0+σr))^p/σr^(2*
 
 # Initial conditions on the time derivative
 # This asserts the pulse is initially moving at speed cm (defined in main program)
-f∂ₜ𝜙(M,r) = (r0-σr)<r<(r0+σr) ? -(8*Amp*fcm(M,r)/r)*((r-r0)^2-σr^2)^3*(r-r0)/σr^8 : 0
+#f∂ₜ𝜙(M,r) = (r0-σr)<r<(r0+σr) ? -(8*Amp*fcm(M,r)/r)*((r-r0)^2-σr^2)^3*(r-r0)/σr^8 : 0
 
 #f∂ₜ𝜙(M,r) = fβʳ(M,r)*f∂ᵣ𝜙(M,r)
+f∂ₜ𝜙(M,r) = 0
+
 
 # Magnitude of dissipation
 # Must be of order 1.
