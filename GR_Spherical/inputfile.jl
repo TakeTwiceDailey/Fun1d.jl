@@ -30,7 +30,7 @@ end
 const M0 = T"1.";
 
 # Number of grid points
-const n = 5001;
+const n = 101;
 
 # Spatial coordinate domain span in units of M0
 
