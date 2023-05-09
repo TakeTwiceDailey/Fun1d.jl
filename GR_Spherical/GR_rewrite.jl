@@ -1,7 +1,7 @@
 module GR_Spherical
 
-#using DifferentialEquations
-#using BoundaryValueDiffEq
+using DifferentialEquations
+using BoundaryValueDiffEq
 using OrdinaryDiffEq
 #using Roots
 
@@ -57,7 +57,7 @@ expr_index(a::AbstractArray, i...) = a[i...]
 const numvar = 9
 
 # Type to store all of the grid functions for the ODE Solver
-VarContainer{T} = ArrayPartition{T, NTuple{numvar+1,Vector{T}}}
+VarContainer{T} = ArrayPartition{T, NTuple{numvar+1,Vec{T}}}
 
 struct Domain{S}
     rmin::S
@@ -79,7 +79,7 @@ end
 
 # Defines how to allocate the grid functions
 @inline function Base.similar(::Type{ArrayPartition},::Type{T},size::Int) where T
-    return ArrayPartition([similar(Vector{T}(undef,size)) for i=1:numvar]...,similar(Vector{T}(undef,2)))::VarContainer{T}
+    return ArrayPartition([similar(Vec{T}(undef,size)) for i=1:numvar]...,similar(Vec{T}(undef,2)))::VarContainer{T}
 end
 
 # Just a fancy ASCII logo for the program
@@ -103,11 +103,11 @@ function printlogo()
 end
 
 # Sample analytic functions to the grid
-function sample!(f::Vector{T}, grid::Grid{S}, fun) where {S,T}
+function sample!(f::Vec{T}, grid::Grid{S}, fun) where {S,T}
 
     rmin = grid.domain.rmin
 
-    f .= T[fun(rmin + dr*(j-1)) for j in 1:(grid.ncells)]
+    f .= Vec{T}([fun(rmin + dr*(j-1)) for j in 1:(grid.ncells)])
 
 end
 
@@ -130,13 +130,11 @@ sign = 1.
 
 fᾶ(M,r) = 1/(r^2 + 2*M(r)*r)
 fβʳ(M,r) = sign*2*M(r)/(2*M(r)+r)
-#fβʳ(M,r) = 0
 fγrr(M,r) = 1 + 2*M(r)/r
 fγθθ(M,r) = r^2
 
 fᾶ(M::Number,r) = 1/(r^2+2*M*r)
 fβʳ(M::Number,r) = sign*2*M/(2*M+r)
-#fβʳ(M::Number,r) = 0
 fγrr(M::Number,r) = 1 + 2*M/r
 
 #Painleve-Gullstrand Coordinates
@@ -312,7 +310,7 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     # In order to catch errors and still have the integrator finish
     # everything is wrapped in a try-catch block.
     try
-
+        
     # Unpack the parameters
     drstate = param.drstate
     temp = param.temp
@@ -333,6 +331,7 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     # about ~40% of runtime is derivatives
 
     for i in 1:numvar mul!(drstate.x[i],D,state.x[i]) end
+    #Threads.@threads for i in 1:numvar mul!(drstate.x[i],D,state.x[i]) end
     #Threads.@threads for i in 1:numvar drstate.x[i] .= D*state.x[i] end
 
     @. rootγ = sqrt(γrr)*γθθ
@@ -358,21 +357,8 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     @. Srr = γrr*( Π^2 + ψr^2/γrr - (m^2)*𝜙^2)/2  # Radial pressure component
     @. Sθθ = γθθ*( Π^2 - ψr^2/γrr - (m^2)*𝜙^2)/2  # Angular pressure component
 
-
-    # Gauge condition for keeping the expansion constant everywhere
-    #@. βʳ = ᾶ*γθθ*(3*frθθ^2*γrr-2*frθθ*())
-
-    # Areal radius remains areal
-    #@. βʳ  = α*Kθθ/frθθ  
-    #∂ᵣβʳ  .= D*βʳ 
-    #∂ᵣ2βʳ .= D*∂ᵣβʳ 
-
-    # @. ᾶ  = βʳ*frθθ/(Kθθ*rootγ)  
-    # ∂ᵣlnᾶ  .= (D*ᾶ)./ᾶ
-    # ∂ᵣ2lnᾶ .= D*∂ᵣlnᾶ 
-
     # Calculate lapse, may be different at every step.
-    @. α = ᾶ*rootγ
+    @. α = ᾶ*γθθ*sqrt(γrr)
 
     # about ~25% of runtime is the actual RHS calculations
 
@@ -507,13 +493,7 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     # # BC on radial characteristics
     # # Uprb = Upri
     # # Krr = Krri
-    #Uprb = -(Umr - Umri1) + Upri1
-    
-    # Constant expansion on the boundary
-    Uprb = @part 1 ( -(cm/cp)*Umr + (cm/cp-1)*sqrt(γrr)*∂ᵣlnᾶ
-     - γrr/Umθ + (Upθ - Umθ)*γrr/γθθ - (cm/cp)*(γrr/γθθ)*Upθ 
-     + 4*pi*(cm/cp)*γrr*γθθ*Um𝜙^2/Umθ )
-    
+    Uprb = -(Umr - Umri1) + Upri1
 
     if cp > 0 && !(is_AH)
 
@@ -601,7 +581,8 @@ function rhs!(dtstate::VarContainer{T},state::VarContainer{T}, param::Param{T}, 
     #Add the numerical dissipation to dtstate
     #about ~30% of runtime is dissipation
 
-    for i in 1:numvar mul!(dtstate.x[i],A6,state.x[i],1,1) end
+    #for i in 1:numvar mul!(dtstate.x[i],A6,state.x[i],1,1) end
+    #Threads.@threads for i in 1:numvar mul!(dtstate.x[i],A6,state.x[i],1,1) end
     #Threads.@threads for i in 1:numvar dtstate.x[i] .+= A6*state.x[i] end
     # this syntax is equivalent to dtstate.x[i] .+= D4*state.x[i]
 
@@ -821,9 +802,12 @@ function main()
     # end
 
     #return 
+    dtstate = similar(ArrayPartition,T,n);
+    rhs!(dtstate,state,param, 0.)
+    println("USEGPU = ", USEGPU, " , n = ", n)
 
-    # dtstate = similar(ArrayPartition,T,n);
-    # return @benchmark rhs!($dtstate,$state, $param, 0.)
+    
+    return @benchmark rhs!($dtstate,$state, $param, 0.)
 
 
 

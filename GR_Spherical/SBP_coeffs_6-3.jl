@@ -178,7 +178,7 @@ Dc = spdiagm(-3=> -1*ones(T,n-3), -2=> 9*ones(T,n-2), -1=> -45*ones(T,n-1),
 Dc[1:6,1:9] .= ql; Dc[n-5:n,n-8:n] .= qr;
 
 # Define SBP differencing operator
-const D = Dc/dr;
+const D = smat(Dc/dr);
 #const Db = BandedMatrix(Dc/dr);
 
 
@@ -188,7 +188,7 @@ const D = Dc/dr;
 σv[1:6] .= σnl; σv[n-5:n] .= σnr;
 
 #const Σ = dr*BandedMatrix(0=>σv);
-const Σ = dr*spdiagm(0=>σv);
+const Σ = smat(dr*spdiagm(0=>σv));
 #const Σ = BandedMatrix(dr*spdiagm(0=>σv));
 
 # Inverse norm
@@ -283,7 +283,7 @@ Ac = spdiagm(-3=>     ones(T,n-3), -2=> -6*ones(T,n-2), -1=> 15*ones(T,n-1),
 
 Ac[1:6,1:9] .= al; Ac[n-5:n,n-8:n] .= ar;
 
-const A6 = ε*Ac;
+const A6 = smat(ε*Ac);
 #const A6 = BandedMatrix(ε*Ac);
 
 #Averaging operator

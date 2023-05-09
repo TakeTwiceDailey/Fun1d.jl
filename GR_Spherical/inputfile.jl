@@ -2,9 +2,23 @@
 #using DoubleFloats
 using SparseArrays
 using BandedMatrices
+using CUDA
 
 # Type to use for all calculations
 const T = Float64;
+
+
+const USEGPU = false
+
+if USEGPU
+    Vec{T} = CuArray{T,1, CUDA.Mem.DeviceBuffer}
+    Cont_type = CuArray
+    smat(x) = CUDA.CUSPARSE.CuSparseMatrixCSC(x)
+else
+    Vec{T} = Vector{T}
+    Mat{T} = SparseMatrixCSC{T, Int64}
+    smat(x) = x
+end
 
 macro T_str(str::AbstractString)
     :(parse(T,$str))
@@ -20,7 +34,7 @@ const n = 5001;
 
 # Spatial coordinate domain span in units of M0
 
-const rspan = T[T"2.1",T"203.0"];
+const rspan = T[T"2.1",T"8.0"];
 
 # Inverse Courant factor (4 works fine, CFL condition demands >~ 1)
 const CFL::T = 4;
@@ -32,13 +46,13 @@ const dr = T((rspan[2]-rspan[1])/(n-1));
 const dt = dr/(CFL)::T;
 
 # Temporal coordinate span in units of M0
-const tspan = T[T"0.", T"250."];
+const tspan = T[T"0.", T"20."];
 
 # Interval between prints to the screen in units of M0
-const print_interval = T"10.";
+const print_interval = T"1.";
 
 # Interval to save the state in units of M0
-const save_interval = T"1.";
+const save_interval = T"0.1";
 
 # Mass of scalar field (not properly implemented on boundaries)
 const m = T"0.0";
@@ -58,8 +72,8 @@ const m = T"0.0";
 # const σr = T"100.0"; const Amp  = T"3.0"; Mtot = 4.29
 # const σr = T"90.0"; const Amp  = T"2.6";
 
-const r0 = T"103.0";
-const σr = T"100.0"; const Amp  = T"1.3";
+const r0 = T"6.0";
+const σr = T"2.0"; const Amp  = T"0.0";
 
 f𝜙(M,r) = (r0-σr)<r<(r0+σr) ? (Amp/r)*(r-(r0-σr))^4*(r-(r0+σr))^4/σr^8 : 0
 #f𝜙(M,r) = (Amp/r)*exp(-((r-r0)/(σr/4))^2)
@@ -77,10 +91,10 @@ f∂ₜ𝜙(M,r) = (r0-σr)<r<(r0+σr) ? -(8*Amp*fcm(M,r)/r)*((r-r0)^2-σr^2)^3*
 # f∂ₜ𝜙(M,r)  = (r0-σr)<r<(r0+σr) ? -(8*Amp*c/r)*(((r-c*t)-r0)^2-σr^2)^3*((r-c*t)-r0)/σr^8 : 0
 
 # Inner Boundary Condition
-const ka = 0
+const ka = 0.
 
 # Outer Boundary Condition
-const kb = 0
+const kb = 0.
 
 # Magnitude of dissipation
 # Must be of order 1.
