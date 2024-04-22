@@ -9,10 +9,10 @@ using Plots
 #using PyPlot
 #using GR
 using RecursiveArrayTools
-using TensorOperations
+#using TensorOperations
 using StaticArrays
 using InteractiveUtils
-using Traceur
+#using Traceur
 
 using StructArrays
 
@@ -77,7 +77,7 @@ const StateTensor{T} = SymmetricSecondOrderTensor{4,T,10}
 # Alias for SymmetricSecondOrderTensor 3x3
 const ThreeTensor{T} = SymmetricSecondOrderTensor{3,T,6}
 
-# Alias for non-symmetric 4 tensor
+# Alias for non-symmetric SecondOrderTensor 4x4
 const FourTensor{T} = SecondOrderTensor{4,T,16}
 
 # This struct type is used to package the state vector into 
@@ -85,85 +85,66 @@ const FourTensor{T} = SecondOrderTensor{4,T,16}
 # into memory, and does not store ϕ derivatives as those vanish in axisymmetry.
 # Another 30% memory savings is possible if we exclude ϕ coponents of tensors,
 # but that is not implemented.
-struct SphericalStateVector{T}
+struct StateVector{T}
     # φ::T
     # ψr::T
     # ψθ::T
     # Π::T
-    g::StateTensor{T}
-    dr::StateTensor{T}
-    dθ::StateTensor{T}
-    P::StateTensor{T}
-end
-
-# This struct type is used to package the state vector into 
-# Cartesian components. Math is done to this struct when integrating
-# the equations, so it needs to have math operators defined.
-struct CartesianStateVector{T}
-    # φ::T
-    # ψx::T
-    # ψy::T
-    # ψz::T
-    # Π::T
+    ρ::T
     g::StateTensor{T}
     dx::StateTensor{T}
     dy::StateTensor{T}
-    dz::StateTensor{T}
     P::StateTensor{T}
+    # Contains metric components and derivatives 
+    # which are represented in memory like:
+    #
+    # A,B,C,D,E,F,G,H,I,J = g.data
+    #
+    # while the physical metric is given by
+    #
+    # g_μν = 
+    # [  A,        ρB,    ρC,   ρ^2D         ]
+    # [  ρB,   I+ρ^2J,    ρE,   ρ^3F         ]
+    # [  ρ^2C,     ρE,     G,   ρ^2H         ]
+    # [  ρ^2D,   ρ^3F,  ρ^2H,   ρ^2(I-ρ^2J)  ]
 end
 
-const Storage{T} = StructArray{SphericalStateVector{T}, 2, NamedTuple{(:g, :dr, :dθ, :P), NTuple{4, Matrix{StateTensor{T}}}}, Int64}
+#const Storage{T} = StructArray{StateVector{T}, 2, NamedTuple{(:g, :dx, :dy, :P), NTuple{4, Matrix{StateTensor{T}}}}, Int64}
 
-# Define math operators for CartesianStateVector
-math_operators = [:+, :-, :*, :/, :^]
-for op in math_operators
+# Define math operators for StateVector
+for op in [:+, :-, :*, :/]
     @eval import Base.$op
-    @eval @inline function $op(A::CartesianStateVector{T},B::CartesianStateVector{T}) where T
+    @eval @inline function $op(A::StateVector{T},B::StateVector{T}) where T
+        @assert A.ρ ≈ B.ρ
         g  = @. $op(A.g,B.g)
         dx = @. $op(A.dx,B.dx)
         dy = @. $op(A.dy,B.dy)
-        dz = @. $op(A.dz,B.dz)
+        #dz = @. $op(A.dz,B.dz)
         P  = @. $op(A.P,B.P)
-        return CartesianStateVector{T}(g,dx,dy,dz,P)
+        return StateVector{T}(A.ρ,g,dx,dy,P)
     end
+end
 
-    @eval @inline function $op(a::Number,B::CartesianStateVector{T}) where T
+for op in [:*, :/]
+    @eval @inline function $op(a::Number,B::StateVector{T}) where T
         g  = $op(a,B.g)
         dx = $op(a,B.dx)
         dy = $op(a,B.dy)
-        dz = $op(a,B.dz)
+        #dz = $op(a,B.dz)
         P  = $op(a,B.P)
-        return CartesianStateVector{T}(g,dx,dy,dz,P)
+        return StateVector{T}(B.ρ,g,dx,dy,P)
     end
 end
 
-for op in math_operators
-    @eval import Base.$op
-    @eval @inline function $op(A::SphericalStateVector{T},B::SphericalStateVector{T}) where T
-        g  = @. $op(A.g,B.g)
-        dr = @. $op(A.dr,B.dr)
-        dθ = @. $op(A.dθ,B.dθ)
-        P  = @. $op(A.P,B.P)
-        return SphericalStateVector{T}(g,dr,dθ,P)
-    end
-
-    @eval @inline function $op(a::Number,B::SphericalStateVector{T}) where T
-        g  = $op(a,B.g)
-        dr = $op(a,B.dr)
-        dθ = $op(a,B.dθ)
-        P  = $op(a,B.P)
-        return SphericalStateVector{T}(g,dr,dθ,P)
-    end
-end
 
 # Define functions to return Stuct components for finite 
 # differencing in constraint calculations
-@inline fg(x,y,U::SphericalStateVector)  = U[x,y].g
-@inline fdr(x,y,U::SphericalStateVector) = U[x,y].dr
-@inline fdθ(x,y,U::SphericalStateVector) = U[x,y].dθ
-@inline fP(x,y,U::SphericalStateVector)  = U[x,y].P
+# @inline fg(x,y,U::StateVector)  = unpack(U[x,y]).g
+# @inline fdx(x,y,U::StateVector) = unpack(U[x,y]).dx
+# @inline fdy(x,y,U::StateVector) = unpack(U[x,y]).dy
+# @inline fP(x,y,U::StateVector)  = unpack(U[x,y]).P
 
-const parity  = StateTensor((1,1,-1,1,1,-1,1,1,-1,1))
+const parity  = StateTensor((1,-1,1,1,1,-1,-1,1,1,1))
 const parityC = Vec{4}((1,1,-1,1))
 
 # @inline function Aθ2(f::Function,U,x,y) 
@@ -192,94 +173,98 @@ const parityC = Vec{4}((1,1,-1,1))
 #     end
 # end
 
-@inline function DrC(f::Function,U,ns,x,y) 
-    n = ns[1]
-    if x in 2:n-1
-        -0.5*f(U[x-1,y])+0.5*f(U[x+1,y])
-    elseif x==1
-        -f(U[1,y]) + f(U[2,y])
-    else#if x==n 
-        -f(U[n-1,y]) + f(U[n,y])
-    end
-    #else @assert false end
-end
+# @inline function DrC(f::Function,U,ns,x,y) 
+#     n = ns[1]
+#     if x in 2:n-1
+#         -0.5*f(U[x-1,y])+0.5*f(U[x+1,y])
+#     elseif x==1
+#         -f(U[1,y]) + f(U[2,y])
+#     else#if x==n 
+#         -f(U[n-1,y]) + f(U[n,y])
+#     end
+#     #else @assert false end
+# end
 
-@inline function DθC(f::Function,U,ns,x,y)
-    n = ns[2]
-    if y in 2:n-1
-        -0.5*f(U[x,y-1]) + 0.5*f(U[x,y+1])
-    elseif y==1
-        #-(3/2)*f(x,1,U) + 2*f(x,2,U) - (1/2)*f(x,3,U)
-        -0.5*parityC.*f(U[x,1]) + 0.5*f(U[x,2])
-        #-f(x,1,U) + f(x,2,U)
-    else#if y==n
-        -0.5*f(U[x,n-1]) + 0.5*parityC.*f(U[x,n]) 
-        #-f(x,n-1,U) + f(x,n,U)
-    end
-end
+# @inline function DθC(f::Function,U,ns,x,y)
+#     n = ns[2]
+#     if y in 2:n-1
+#         -0.5*f(U[x,y-1]) + 0.5*f(U[x,y+1])
+#     elseif y==1
+#         #-(3/2)*f(x,1,U) + 2*f(x,2,U) - (1/2)*f(x,3,U)
+#         -0.5*parityC.*f(U[x,1]) + 0.5*f(U[x,2])
+#         #-f(x,1,U) + f(x,2,U)
+#     else#if y==n
+#         -0.5*f(U[x,n-1]) + 0.5*parityC.*f(U[x,n]) 
+#         #-f(x,n-1,U) + f(x,n,U)
+#     end
+# end
+
+# @inline function Dr2(f::Function,U,ns,x,y)
+#     n = ns[1]
+#     if x in 2:n-1
+#         -0.5*f(U[x-1,y])+0.5*f(U[x+1,y])
+#     elseif x==1
+#         -f(U[1,y]) + f(U[2,y])
+#     else#if x==n 
+#         -f(U[n-1,y]) + f(U[n,y])
+#     end
+#     #else @assert false end
+# end
+
+# @inline function Dθ2(f::Function,U,ns,x,y,p=1)
+#     n = ns[2]
+#     if y in 2:n-1
+#         -0.5*f(U[x,y-1]) + 0.5*f(U[x,y+1])
+#     elseif y==1
+#         #-(3/2)*f(x,1,U) + 2*f(x,2,U) - (1/2)*f(x,3,U)
+#         -0.5*p*parity.*f(U[x,1]) + 0.5*f(U[x,2]) # 
+#         #-f(x,1,U) + f(x,2,U)
+#     else#if y==n
+#         -0.5*f(U[x,n-1]) + 0.5*p*parity.*f(U[x,n]) 
+#         #-f(x,n-1,U) + f(x,n,U)
+#     end
+#     #else @assert false end
+# end
 
 @inline function Dr2(f::Function,U,ns,x,y)
     n = ns[1]
     if x in 2:n-1
-        -0.5*f(U[x-1,y])+0.5*f(U[x+1,y])
+        0.5*(-f(U[x-1,y]) + f(U[x+1,y]))
     elseif x==1
         -f(U[1,y]) + f(U[2,y])
-    else#if x==n 
+    elseif x==n 
         -f(U[n-1,y]) + f(U[n,y])
     end
-    #else @assert false end
 end
 
-@inline function Dθ2(f::Function,U,ns,x,y)
+@inline function Dθ2(f::Function,U,ns,x,y,p=1)
     n = ns[2]
     if y in 2:n-1
-        -0.5*f(U[x,y-1]) + 0.5*f(U[x,y+1])
+        0.5*(-f(U[x,y-1]) + f(U[x,y+1]))
     elseif y==1
-        #-(3/2)*f(x,1,U) + 2*f(x,2,U) - (1/2)*f(x,3,U)
-        -0.5*parity.*f(U[x,1]) + 0.5*f(U[x,2])
-        #-f(x,1,U) + f(x,2,U)
-    else#if y==n
-        -0.5*f(U[x,n-1]) + 0.5*parity.*f(U[x,n]) 
-        #-f(x,n-1,U) + f(x,n,U)
+        #0.5*(-p*f(U[x,2]) + f(U[x,2])) # includes the axis
+        0.5*(-p*parity.*f(U[x,1]) + f(U[x,2])) # straddles the axis
+    elseif y==n
+        #0.5*(-f(U[x,n-1]) + p*f(U[x,n-1])) # includes the axis
+        0.5*(-f(U[x,n-1]) + p*parity.*f(U[x,n])) # straddles the axis
     end
-    #else @assert false end
 end
 
-@inline function Divθ2(f::Function,U,ns,x,y)
-    n = ns[2]
-    if y in 2:n-1
-        -0.5*f(U[x,y-1]) + 0.5*f(U[x,y+1])
-    elseif y==1
-        0.5*parity.*f(U[x,1]) + 0.5*f(U[x,2])
-    else#if y==n
-        -0.5*f(U[x,n-1]) - 0.5*parity.*f(U[x,n]) 
-    end
-    #else @assert false end
+@inline function Dρ2(f::Function,U,r,θ,ns,_ds,x,y,p=1) 
+    Dr2(f,U,ns,x,y)*_ds[1]*sin(θ) + Dθ2(f,U,ns,x,y,p)*_ds[2]*cos(θ)/r
 end
 
-# @inline function Dx2(f::Function,U,r,θ,ns,_ds,x,y) 
-#     Dr2(f,U,ns,x,y)*_ds[1]*sin(θ[x,y]) + Dθ2(f,U,ns,x,y)*_ds[2]*cos(θ[x,y])/r[x,y]
-# end
-
-# @inline function Dz2(f::Function,U,r,θ,ns,_ds,x,y)
-#     Dr2(f,U,ns,x,y)*_ds[1]*cos(θ[x,y]) - Dθ2(f,U,ns,x,y)*_ds[2]*sin(θ[x,y])/r[x,y]
-# end
-
-# @inline function Divx2(f::Function,U,r,θ,ns,_ds,x,y) 
-#     Dr2(f,U,ns,x,y)*_ds[1]*sin(θ[x,y]) + Divθ2(f,U,ns,x,y)*_ds[2]*cos(θ[x,y])/r[x,y]
-# end
-
-# @inline function Divz2(f::Function,U,r,θ,ns,_ds,x,y)
-#     Dr2(f,U,ns,x,y)*_ds[1]*cos(θ[x,y]) - Divθ2(f,U,ns,x,y)*_ds[2]*sin(θ[x,y])/r[x,y]
-# end
-
-# @inline function Divxz(vx::Function,vz::Function,U,r,θ,ns,_ds,x,y)
-#     (Divx2(vx,U,r,θ,ns,_ds,x,y) + Divz2(vz,U,r,θ,ns,_ds,x,y))/rootγ(U[x,y])
-# end
-
-@inline function Div(vr::Function,vθ::Function,U,ns,_ds,x,y)::StateTensor
-    (Dr2(vr,U,ns,x,y)*_ds[1] + Divθ2(vθ,U,ns,x,y)*_ds[2])/rootγ(U[x,y])
+@inline function Dz2(f::Function,U,r,θ,ns,_ds,x,y,p=1)
+    Dr2(f,U,ns,x,y)*_ds[1]*cos(θ) - Dθ2(f,U,ns,x,y,p)*_ds[2]*sin(θ)/r
 end
+
+@inline function Div(vr::Function,vθ::Function,U,r,θ,ns,_ds,x,y)
+    (Dρ2(vr,U,r,θ,ns,_ds,x,y,-1) + Dz2(vθ,U,r,θ,ns,_ds,x,y,-1))#/rootγ(U[x,y])
+end
+
+# @inline function Div(vr::Function,vθ::Function,U,ns,_ds,x,y)::StateTensor
+#     (Dr2(vr,U,ns,x,y)*_ds[1] + Dθ2(vθ,U,ns,x,y,-1)*_ds[2])/rootγ(U[x,y])
+# end
 
 #@inline function Div(vx::Function,vz::Function,U,r,θ,ns,_ds,x,y)
 #     (Dr2(vx,U,r,θ,ns,_ds,x,y) + Divz2(vz,U,r,θ,ns,_ds,x,y))/rootγ(x,y,U)
@@ -306,12 +291,14 @@ end
 
 # end
 
-@inline function u(U::SphericalStateVector) # Scalar gradient-flux
+@inline function u(Us::StateVector) # Scalar gradient-flux
+
+    U = unpack(Us)
 
     # Give names to stored arrays from the state vector
     g  = U.g 
-    dr = U.dr
-    dθ = U.dθ  
+    dx = U.dx
+    dy = U.dy  
     P  = U.P 
 
     gi = inv(g)
@@ -321,16 +308,18 @@ end
     βr = -gi[1,2]/gi[1,1]
     βθ = -gi[1,3]/gi[1,1]
 
-    return βr*dr + βθ*dθ - α*P
+    return βr*dx + βθ*dy - α*P
 
 end
 
-@inline function vr(U::SphericalStateVector) # r component of the divergence-flux
+@inline function vr(Us::StateVector) # r component of the divergence-flux
+
+    U = unpack(Us)
 
     # Give names to stored arrays from the state vector
     g  = U.g 
-    dr = U.dr 
-    dθ = U.dθ
+    dx = U.dx 
+    dy = U.dy
     P  = U.P 
 
     _,_,_,_,γs... = g.data
@@ -345,16 +334,20 @@ end
 
     βr = -gi[1,2]/gi[1,1]
 
-    return rootγ(U)*(βr*P - α*(γi[1,1]*dr + γi[1,2]*dθ))
+    #return rootγ(Us)*(βr*P - α*(γi[1,1]*dx + γi[1,2]*dy))
+
+    return (βr*P - α*(γi[1,1]*dx + γi[1,2]*dy))
     
 end
 
-@inline function vθ(U::SphericalStateVector) # θ component of the divergence-flux
+@inline function vθ(Us::StateVector) # θ component of the divergence-flux
+
+    U = unpack(Us)
 
     # Give names to stored arrays from the state vector
     g  = U.g 
-    dr = U.dr
-    dθ = U.dθ  
+    dx = U.dx
+    dy = U.dy  
     P  = U.P 
 
     _,_,_,_,γs... = g.data
@@ -369,15 +362,17 @@ end
 
     βθ = -gi[1,3]/gi[1,1]
 
-    return rootγ(U)*(βθ*P - α*(γi[2,1]*dr + γi[2,2]*dθ))
+    #return rootγ(Us)*(βθ*P - α*(γi[2,1]*dx + γi[2,2]*dy))
+
+    return (βθ*P - α*(γi[2,1]*dx + γi[2,2]*dy))
     
 end
 
 
-@inline function rootγ(U::SphericalStateVector)
+@inline function rootγ(U::StateVector)
 
     # Give names to stored arrays from the state vector
-    g  = U.g 
+    g = unpack(U).g 
 
     # Unpack the metric into indiviual components
     _,_,_,_,γs... = g.data
@@ -386,307 +381,150 @@ end
 
     detγ = det(γ)
 
-    if detγ < 0
-        println(x," ",y," ",γ[1,1]," ",γ[2,2]," ",γ[3,3]," ")
-    end
+    # if detγ < 0
+    #     println(x," ",y," ",γ[1,1]," ",γ[2,2]," ",γ[3,3]," ")
+    # end
 
     return sqrt(detγ)
 end
 
-@inline function SphericalToCartesian(U::SphericalStateVector{T},r,θ) where T
+
+@inline function unpack(U::StateVector{T}) where T
 
     # Give names to stored arrays from the state vector
-    g  = U.g 
-    dr = U.dr   
-    dθ = U.dθ 
-    P  = U.P
+    ρ = U.ρ
+    gs  = U.g 
+    dxs = U.dx   
+    dys = U.dy  
+    Ps  = U.P 
 
-    # Transformation matrices from spherical to Cartesian evaluated at ϕ=0
-    Λi   = FourTensor{T}((1.,0.,0.,0.,0.,sin(θ),cos(θ)/r,0.,0.,0.,0.,1/sin(θ)/r,0.,cos(θ),-sin(θ)/r,0.))
-    ∂rΛi = FourTensor{T}((0.,0.,0.,0.,0.,0.,-cos(θ)/r^2,0.,0.,0.,0.,-1/sin(θ)/r^2,0.,0.,sin(θ)/r^2,0.))
-    ∂θΛi = FourTensor{T}((0.,0.,0.,0.,0.,cos(θ),-sin(θ)/r,0.,0.,0.,0.,-cos(θ)/r/sin(θ)^2,0.,-sin(θ),-cos(θ)/r,0.))
-    ∂ϕΛi = FourTensor{T}((0.,0.,0.,0.,0.,0.,0.,-1/sin(θ)/r,0.,sin(θ),cos(θ)/r,0.,0.,0.,0.,0.)) 
-    ∂Λi  = Tensor{Tuple{4,4,4},T}(
-        (σ,μ,ν) -> (σ==1 ? 0. : σ==2 ? ∂rΛi[μ,ν] : σ==3 ? ∂θΛi[μ,ν] : σ==4 ? ∂ϕΛi[μ,ν] : @assert false)
-        )
+    A,B,C,D,E,F,G,H,I,J = gs.data
+    dxA,dxB,dxC,dxD,dxE,dxF,dxG,dxH,dxI,dxJ = dxs.data
+    dyA,dyB,dyC,dyD,dyE,dyF,dyG,dyH,dyI,dyJ = dys.data
+    PA,PB,PC,PD,PE,PF,PG,PH,PI,PJ = Ps.data
 
-    #52ns
+    #dtgs = 
 
-    # convert to Cartesian derivatives
-    ∂Λi = @einsum (σ,μ,ν) -> Λi[σp,σ]*∂Λi[σp,μ,ν]
+    g  = StateTensor{T}((A,ρ*B,C,ρ^2*D,I+ρ^2*J,ρ*E,ρ^3*F,G,ρ^2*H,ρ^2*(I-ρ^2*J)))
 
-    # 50ns
-
-    # Calculate inverse components in Cartesian
-    gi = inv(g)
-
-    α = 1/sqrt(-gi[1,1])
-
-    βr = -gi[1,2]/gi[1,1]
-    βθ = -gi[1,3]/gi[1,1]
-
-    # 50ns
-
-    # Calculate time derivative of the metric using only the state vector
-    ∂tgs = symmetric(βr*dr + βθ*dθ - α*P)
-    
-    ∂g = Tensor{Tuple{4,@Symmetry{4,4}},T}(
-        (σ,μ,ν) -> (σ==1 ? ∂tgs[μ,ν] : σ==2 ? dr[μ,ν] : σ==3 ? dθ[μ,ν] : σ==4 ? 0. : @assert false)
-        )
-
-    #50ns 
-
-    #return
-
-    # Conversion of spherical metric derivatives to Cartesian ones
-
-    # You have to break up long expressions into multiple parts
-    # or else performance gets trashed 
-    ∂gc  = @einsum (σ,μ,ν) -> Λi[μp,μ]*Λi[νp,ν]*∂g[σ,μp,νp]
-    ∂gc  = @einsum (σ,μ,ν) -> Λi[σp,σ]*∂gc[σp,μ,ν]
-    ∂gc += @einsum (σ,μ,ν) -> ∂Λi[σ,μp,μ]*Λi[νp,ν]*g[μp,νp]
-    ∂gc += @einsum (σ,μ,ν) -> ∂Λi[σ,νp,ν]*Λi[μp,μ]*g[μp,νp]
-
-    #50ns 
-
-    # Convert to Spherical Components on the state vector
-    g   = symmetric(@einsum Λi[μp,μ]*Λi[νp,ν]*g[μp,νp])
-    ∂tg = symmetric(∂gc[1,:,:])
-    dx  = symmetric(∂gc[2,:,:])
-    dy  = symmetric(∂gc[3,:,:])
-    dz  = symmetric(∂gc[4,:,:])
-
-    # Calculate inverse components in spherical
     gi = inv(g)
 
     α = 1/sqrt(-gi[1,1])
 
     βx = -gi[1,2]/gi[1,1]
-    βy = -gi[1,3]/gi[1,1]
-    βz = -gi[1,4]/gi[1,1]
-    
-    P = symmetric(-(∂tg/α - (βx/α)*dx - (βy/α)*dy - (βz/α)*dz))
+    #βy = -gi[1,3]/gi[1,1]
+    #βz = -gi[1,4]/gi[1,1]
+    nρ = -βx/α
 
-    Uc = CartesianStateVector{T}(g,dx,dy,dz,P)
+    dy = StateTensor{T}((dyA,ρ*dyB,dyC,ρ^2*dyD,dyI+ρ^2*dyJ,ρ*dyE,ρ^3*dyF,dyG,ρ^2*dyH,ρ^2*(dyI-ρ^2*dyJ)))
 
-    return Uc
+    dx = StateTensor{T}( # Apply product rule here for ρ derivatives
+        (dxA,ρ*dxB+B,dxC,ρ^2*dxD+2*ρ*D,dxI+ρ^2*dxJ+2*ρ*J,
+        ρ*dxE+E,ρ^3*dxF+3*ρ^2*F,dxG,ρ^2*dxH+2*ρ*H,
+        ρ^2*(dxI-ρ^2*dxJ-2*ρ*J)+2*ρ*(I-ρ^2*J))
+        )
+
+    g  = StateTensor{T}((A,ρ*B,C,ρ^2*D,I+ρ^2*J,ρ*E,ρ^3*F,G,ρ^2*H,ρ^2*(I-ρ^2*J)))
+
+    # Product rule here, need nρ
+    P  = StateTensor{T}(
+        (PA,ρ*PB-nρ*B,PC,ρ^2*PD-2ρ*nρ*D,PI+ρ^2*PJ-2ρ*nρ*J,
+        ρ*PE-nρ*E,ρ^3*PF-3ρ^2*nρ*F,PG,ρ^2*PH-2ρ*nρ*H,
+        ρ^2*(PI-ρ^2*PJ+2ρ*nρ*J)-2ρ*nρ*(I-ρ^2*J))
+        )
+
+    return StateVector{T}(ρ,g,dx,dy,P)
 
 end
 
-@inline function CartesianToSpherical(U::CartesianStateVector{T},r,θ) where T
+# @inline function unpack(gs::StateTensor{T}) where T
+
+#     A,B,C,D,E,F,G,H,I,J = gs.data
+
+#     g  = StateTensor{T}((A,ρ*B,C,ρ^2*D,I+ρ^2*J,ρ*E,ρ^3*F,G,ρ^2*H,ρ^2*(I-ρ^2*J)))
+
+#     return g
+
+# end
+
+@inline function pack(U::StateVector{Type}) where Type
+
+    # Give names to stored arrays from the state vector
+    ρ = U.ρ
+
+    g  = U.g 
+    dx = U.dx   
+    dy = U.dy  
+    P  = U.P 
+
+    gi = inv(g)
+
+    α = 1/sqrt(-gi[1,1])
+
+    βx = -gi[1,2]/gi[1,1]
+
+    nρ = -βx/α
+
+    gtt,gtρ,gtz,gtϕ,gρρ,gρz,gρϕ,gzz,gzϕ,gϕϕ = g.data
+    dxtt,dxtρ,dxtz,dxtϕ,dxρρ,dxρz,dxρϕ,dxzz,dxzϕ,dxϕϕ = dx.data
+    dytt,dytρ,dytz,dytϕ,dyρρ,dyρz,dyρϕ,dyzz,dyzϕ,dyϕϕ = dy.data
+    Ptt,Ptρ,Ptz,Ptϕ,Pρρ,Pρz,Pρϕ,Pzz,Pzϕ,Pϕϕ = P.data
+
+    # if ρ == 0.
+
+    #     gs  = StateTensor{Type}((gtt,0.,gtz,0.,0.,0.,gzz,0.,gρρ,0.))
+    #     dys = StateTensor{Type}((dytt,0.,dytz,0.,0.,0.,dyzz,0.,dyρρ,0.))
+    #     dxs = StateTensor{Type}((0.,dxtρ,0.,0.,dxρz,0.,0.,0.,0.,0.))
+    #     Ps  = StateTensor{Type}((Ptt,Ptρ,Ptz,0.,Pρz,0.,Pzz,0.,Pρρ,0.))
+
+    # else
+
+    gs  = StateTensor{Type}(
+        (gtt,gtρ/ρ,gtz,gtϕ/ρ^2,gρz/ρ,gρϕ/ρ^3,gzz,gzϕ/ρ^2,0.5*(gρρ+gϕϕ/ρ^2),0.5*(gρρ/ρ^2-gϕϕ/ρ^4))
+        )
+    dys = StateTensor{Type}(
+        (dytt,dytρ/ρ,dytz,dytϕ/ρ^2,dyρz/ρ,dyρϕ/ρ^3,dyzz,dyzϕ/ρ^2,0.5*(dyρρ+dyϕϕ/ρ^2),0.5*(dyρρ/ρ^2-dyϕϕ/ρ^4))
+        )
+    dxs = StateTensor{Type}( # Product Rule applied per component here
+        (dxtt,dxtρ/ρ-gtρ/ρ^2,dxtz,dxtϕ/ρ^2-gtϕ/2/ρ^3,dxρz/ρ-gρz/ρ^2,
+        dxρϕ/ρ^3-gρϕ/3/ρ^4,dxzz,dxzϕ/ρ^2-gzϕ/2/ρ^3,
+        0.5*(dxρρ+dxϕϕ/ρ^2-2gϕϕ/ρ^3),0.5*(dxρρ/ρ^2-2gρρ/ρ^3-dxϕϕ/ρ^4+4gϕϕ/ρ^5)))
+
+    Ps  = StateTensor{Type}(# Product Rule applied per component here
+        (Ptt,Ptρ/ρ+nρ*gtρ/ρ^2,Ptz,
+        Ptϕ/ρ^2+2nρ*gtϕ/ρ^3,
+        Pρz/ρ+nρ*gρz/ρ^2,Pρϕ/ρ^3+3nρ*gρϕ/ρ^4,
+        Pzz,Pzϕ/ρ^2+2nρ*gzϕ/ρ^3,0.5*(Pρρ+Pϕϕ/ρ^2+2nρ*gϕϕ/ρ^3),
+        0.5*(Pρρ/ρ^2+2nρ*gρρ/ρ^3-Pϕϕ/ρ^4-4nρ*gϕϕ/ρ^5))
+        )
+    #end
+
+    return StateVector{Type}(ρ,gs,dxs,dys,Ps)
+
+end
+
+function constraints(Us::StateVector{T}) where T
+
+    U = unpack(Us)
 
     # Give names to stored arrays from the state vector
     g  = U.g 
     dx = U.dx   
-    dy = U.dy
-    dz = U.dz  
-    P  = U.P 
-
-    # Transformation matrices from Cartesian to spherical evaluated at ϕ=0
-    Λ   = FourTensor{T}((1.,0.,0.,0.,0.,sin(θ),0.,cos(θ),0.,r*cos(θ),0.,-r*sin(θ),0.,0.,r*sin(θ),0.))
-    ∂rΛ = FourTensor{T}((0.,0.,0.,0.,0.,0.,0.,0.,0.,cos(θ),0.,-sin(θ),0.,0.,sin(θ),0.)) 
-    ∂θΛ = FourTensor{T}((0.,0.,0.,0.,0.,cos(θ),0.,-sin(θ),0.,-r*sin(θ),0.,-r*cos(θ),0.,0.,r*cos(θ),0.)) 
-    ∂ϕΛ = FourTensor{T}((0.,0.,0.,0.,0.,0.,sin(θ),0.,0.,0.,r*cos(θ),0.,0.,-r*sin(θ),0.,0.)) 
-    ∂Λ  = Tensor{Tuple{4,4,4},T}(
-        (σ,μ,ν) -> (σ==1 ? 0. : σ==2 ? ∂rΛ[μ,ν] : σ==3 ? ∂θΛ[μ,ν] : σ==4 ? ∂ϕΛ[μ,ν] : @assert false)
-        )
-
-    # Calculate inverse components in Cartesian
-    gi = inv(g)
-
-    α = 1/sqrt(-gi[1,1])
-
-    βx = -gi[1,2]/gi[1,1]
-    βy = -gi[1,3]/gi[1,1]
-    βz = -gi[1,4]/gi[1,1]
-
-    # Calculate time derivative of the metric using only the state vector
-    ∂tgc = βx*dx + βy*dy + βz*dz - α*P
-    
-    ∂gc = Tensor{Tuple{4,@Symmetry{4,4}},T}(
-        (σ,μ,ν) -> (σ==1 ? ∂tgc[μ,ν] : σ==2 ? dx[μ,ν] : σ==3 ? dy[μ,ν] : σ==4 ? dz[μ,ν] : @assert false)
-        )
-
-    # Conversion of Cartesian metric derivatives to spherical ones
-
-    # You have to break up long expressions into multiple parts
-    # or else performance gets trashed 
-    ∂gs  = @einsum (σ,μ,ν) -> Λ[μp,μ]*Λ[νp,ν]*∂gc[σ,μp,νp]
-    ∂gs  = @einsum (σ,μ,ν) -> Λ[σp,σ]*∂gs[σp,μ,ν]
-    ∂gs += @einsum (σ,μ,ν) -> ∂Λ[σ,μp,μ]*Λ[νp,ν]*g[μp,νp]
-    ∂gs += @einsum (σ,μ,ν) -> ∂Λ[σ,νp,ν]*Λ[μp,μ]*g[μp,νp]
-
-    # ∂g  = @einsum Λ[σp,σ]*Λ[μp,μ]*Λ[νp,ν]*∂g[σp,μp,νp] 
-    # ∂g += @einsum ∂Λ[σ,μp,μ]*Λ[νp,ν]*g[μp,νp]
-    # ∂g += @einsum ∂Λ[σ,νp,ν]*Λ[μp,μ]*g[μp,νp]
-
-    # Convert to Spherical Components on the state vector
-    g   = symmetric(@einsum Λ[μp,μ]*Λ[νp,ν]*g[μp,νp])
-    ∂tg = symmetric(∂gs[1,:,:])
-    dr  = symmetric(∂gs[2,:,:])
-    dθ  = symmetric(∂gs[3,:,:])
-
-    # Calculate inverse components in spherical
-    gi = inv(g)
-
-    α = 1/sqrt(-gi[1,1])
-
-    βr = -gi[1,2]/gi[1,1]
-    βθ = -gi[1,3]/gi[1,1]
-    
-    P = symmetric(-(∂tg - βr*dr - βθ*dθ)/α)
-
-    return SphericalStateVector{T}(g,dr,dθ,P)
-
-end
-
-# Convert time derivatives of the state vector to Cartesian ones
-@inline function TimeSphericalToCartesian(∂tU::SphericalStateVector{T},U::SphericalStateVector{T},r,θ) where T
-
-    g  = U.g 
-    dr = U.dr   
-    dθ = U.dθ 
-    P  = U.P
-
-    ∂tg  = ∂tU.g 
-    ∂tdr = ∂tU.dr   
-    ∂tdθ = ∂tU.dθ 
-    ∂tP  = ∂tU.P
-
-    # Transformation matrix from Cartesian to spherical evaluated at ϕ=0
-    Λ   = SecondOrderTensor{4,T}((1.,0.,0.,0.,0.,sin(θ),0.,cos(θ),0.,r*cos(θ),0.,-r*sin(θ),0.,0.,r*sin(θ),0.))
-
-    # Transformation matrices from spherical to Cartesian evaluated at ϕ=0
-    Λi   = SecondOrderTensor{4,T}((1.,0.,0.,0.,0.,sin(θ),cos(θ)/r,0.,0.,0.,0.,1/sin(θ)/r,0.,cos(θ),-sin(θ)/r,0.))
-    ∂rΛi = SecondOrderTensor{4,T}((0.,0.,0.,0.,0.,0.,-cos(θ)/r^2,0.,0.,0.,0.,-1/sin(θ)/r^2,0.,0.,sin(θ)/r^2,0.))
-    ∂θΛi = SecondOrderTensor{4,T}((0.,0.,0.,0.,0.,cos(θ),-sin(θ)/r,0.,0.,0.,0.,-cos(θ)/r/sin(θ)^2,0.,-sin(θ),-cos(θ)/r,0.))
-    ∂ϕΛi = SecondOrderTensor{4,T}((0.,0.,0.,0.,0.,0.,0.,-1/sin(θ)/r,0.,sin(θ),cos(θ)/r,0.,0.,0.,0.,0.)) 
-    ∂Λi  = Tensor{Tuple{4,4,4},T}(
-        (σ,μ,ν) -> (σ==1 ? 0. : σ==2 ? ∂rΛi[μ,ν] : σ==3 ? ∂θΛi[μ,ν] : σ==4 ? ∂ϕΛi[μ,ν] : @assert false)
-        )
-
-    # convert to Cartesian derivatives
-    ∂Λi = @einsum (σ,μ,ν) -> Λi[σp,σ]*∂Λi[σp,μ,ν]
-
-    #return #130ns up from 74 ns
-
-    # Calculate inverse components in Cartesian
-    gi = inv(g)
-
-    α = 1/sqrt(-gi[1,1])
-
-    βr = -gi[1,2]/gi[1,1]
-    βθ = -gi[1,3]/gi[1,1]
-
-    β = @Vec [0.,βr,βθ,0.]
-
-    # Unpack the metric into indiviual components
-    _,_,_,_,γs... = g.data
-
-    γ = ThreeTensor(γs)
-
-    γi3 = inv(γ)
-
-    γi = StateTensor((0.,0.,0.,0.,γi3.data...))
-
-    nt = 1.0/α; nr = -βr/α; nθ = -βθ/α; 
-
-    n = @Vec [nt,nr,nθ,0.0]
-
-    n_ = @Vec [-α,0.0,0.0,0.0]
-
-    ∂tα = -0.5*α*(@einsum n[μ]*n[ν]*∂tg[μ,ν])
-    ∂tβ =   α*(@einsum σ -> γi[σ,μ]*n[ν]*∂tg[μ,ν]) # result is a 4-vector
-
-    ∂t∂tgc  = βr*∂tdr + βθ*∂tdθ - α*∂tP + ∂tβ[2]*dr + ∂tβ[3]*dθ - ∂tα*P
-
-    ∂t∂g = Tensor{Tuple{4,@Symmetry{4,4}},T}(
-        (σ,μ,ν) -> (σ==1 ? ∂t∂tgc[μ,ν] : σ==2 ? ∂tdr[μ,ν] : σ==3 ? ∂tdθ[μ,ν] : σ==4 ? 0. : @assert false)
-        )
-
-    #return # 2.2μs
-
-    # Conversion of metric derivatives to spherical ones
-    # This only works if the transformation matrices are independent of time
-
-    ∂t∂gc  = @einsum (σ,μ,ν) -> Λi[μp,μ]*Λi[νp,ν]*∂t∂g[σ,μp,νp]
-    ∂t∂gc  = @einsum (σ,μ,ν) -> Λi[σp,σ]*∂t∂gc[σp,μ,ν]
-    ∂t∂gc += @einsum (σ,μ,ν) -> ∂Λi[σ,μp,μ]*Λi[νp,ν]*∂tg[μp,νp]
-    ∂t∂gc += @einsum (σ,μ,ν) -> ∂Λi[σ,νp,ν]*Λi[μp,μ]*∂tg[μp,νp]
-
-    ∂tg   = symmetric(@einsum Λi[μ,μp]*Λi[ν,νp]*∂tg[μ,ν])
-    ∂t∂tg = symmetric(∂t∂gc[1,:,:])
-    ∂tdx  = symmetric(∂t∂gc[2,:,:])
-    ∂tdy  = symmetric(∂t∂gc[3,:,:])
-    ∂tdz  = symmetric(∂t∂gc[4,:,:])
-
-    ∂tα = -0.5*α*(@einsum n[μ]*n[ν]*∂tg[μ,ν])
-    ∂tβ = α*(@einsum γi[σ,μ]*n[ν]*∂tg[μ,ν]) # result is a 4-vector
-
-    Uc = SphericalToCartesian(U,r,θ)
-
-    g  = Uc.g 
-    dx = Uc.dx   
-    dy = Uc.dy
-    dz = Uc.dz  
-    P  = Uc.P 
-
-    gi = inv(g)
-
-    α = 1/sqrt(-gi[1,1])
-
-    βx = -gi[1,2]/gi[1,1]
-    βy = -gi[1,3]/gi[1,1]
-    βz = -gi[1,4]/gi[1,1]
-
-    # Unpack the metric into indiviual components
-    _,_,_,_,γs... = g.data
-
-    γ = ThreeTensor(γs)
-
-    γi3 = inv(γ)
-
-    γi = StateTensor((0.,0.,0.,0.,γi3.data...))
-
-    nt = 1.0/α; nx = -βx/α; ny = -βy/α;  nz = -βz/α; 
-
-    n = @Vec [nt,nx,ny,nz]
-
-    n_ = @Vec [-α,0.0,0.0,0.0]
-
-    ∂tα = -0.5*α*(@einsum n[μ]*n[ν]*∂tg[μ,ν])
-    ∂tβ =   α*(@einsum γi[σ,μ]*n[ν]*∂tg[μ,ν]) # result is a 4-vector
-
-    ∂tP  =  -(∂t∂tg - βx*∂tdx - βy*∂tdy - βz*∂tdz)/α
-    ∂tP += ∂tα*(∂tg - βx*dx - βy*dy - βz*dz)/α^2
-    ∂tP += (∂tβ[2]*dx + ∂tβ[3]*dy + ∂tβ[4]*dz)/α
-
-    return CartesianStateVector(∂tg,∂tdx,∂tdy,∂tdz,∂tP)
-
-end
-
-function constraints(U::SphericalStateVector{T}) where T
-
-    # Give names to stored arrays from the state vector
-    g  = U.g 
-    dr = U.dr   
-    dθ = U.dθ  
+    dy = U.dy  
     P  = U.P 
 
     gi = inv(g)
 
     α = 1/sqrt(-gi[1,1])
-
-    #β = @Vec (-[gi[1,2],gi[1,3],gi[1,4]]/gi[1,1])
 
     βr = -gi[1,2]/gi[1,1]
     βθ = -gi[1,3]/gi[1,1]
 
     # Calculate time derivative of the metric
-    ∂tg = βr*dr + βθ*dθ - α*P
+    ∂tg = βr*dx + βθ*dy - α*P
 
     ∂g = Tensor{Tuple{4,@Symmetry{4,4}},T}(
-        (σ,μ,ν) -> (σ==1 ? ∂tg[μ,ν] : σ==2 ? dr[μ,ν] : σ==3 ? dθ[μ,ν] : σ==4 ? 0. : @assert false)
+        (σ,μ,ν) -> (σ==1 ? ∂tg[μ,ν] : σ==2 ? dx[μ,ν] : σ==3 ? dy[μ,ν] : σ==4 ? 0. : @assert false)
         )
 
     Γ  = Tensor{Tuple{4,@Symmetry{4,4}},T}(
@@ -705,16 +543,18 @@ function integrate_constraints(U,H,ns,_ds)
 
     for x in ns[1], y in ns[2]
 
-        Uxy = U[x,y]
+        Us = U[x,y]
+
+        Uxy = unpack(Us)
         Hxy = H[x,y]
 
         g  = Uxy.g 
 
         gi = inv(g)
 
-        Cxy = constraints(Uxy) - Hxy
+        Cxy = constraints(Us) - Hxy
 
-        int += sqrt(abs((@einsum gi[μ,ν]*Cxy[μ]*Cxy[ν])*rootγ(Uxy)/_ds[1]/_ds[2]))
+        int += sqrt(abs((@einsum gi[μ,ν]*Cxy[μ]*Cxy[ν])*rootγ(U[x,y])/_ds[1]/_ds[2]))
 
     end
 
@@ -724,27 +564,34 @@ end
 
 @parallel_indices (x,y) function rhs!(S,U1,U2,U3,H,∂H,rm,θm,ns,dt,_ds,iter)
 
-    #S = Float64
     #Explicit slices from main memory
+    # At each iteration in an Runge-Kutta algorithm,
+    # a U-read (U) and U-write (Uw) are defined
     if iter == 1
         U = U1
-        Uxy = U1[x,y]#::StateTensor{S}
+        Uw = U2
+        Uxy = U[x,y]
     elseif iter == 2
         U = U2
-        Uxy = U2[x,y]#::StateTensor{S}
+        Uw = U3
+        Uxy = U[x,y]
     else
         U = U3
-        Uxy = U3[x,y]#::StateTensor{S}
+        Uw = U1
+        Uxy = U[x,y]
     end
+
+    Uxy = unpack(Uxy)
 
     Hxy = H[x,y]; ∂Hxy = ∂H[x,y];
 
     r = rm[x,y]; θ = θm[x,y];
 
     # Give names to stored arrays from the state vector
+    ρ = Uxy.ρ
     g  = Uxy.g 
-    dr = Uxy.dr   
-    dθ = Uxy.dθ  
+    dx = Uxy.dx   
+    dy = Uxy.dy  
     P  = Uxy.P 
 
     # Calculate inverse components in spherical
@@ -755,7 +602,7 @@ end
     βr = -gi[1,2]/gi[1,1]
     βθ = -gi[1,3]/gi[1,1]
 
-    ∂tgs = βr*dr + βθ*dθ - α*P
+    ∂tgs = βr*dx + βθ*dy - α*P
 
     # Unpack the metric into indiviual components
     _,_,_,_,γs... = g.data
@@ -779,7 +626,7 @@ end
     n_ = @Vec [-α,0.0,0.0,0.0]
 
     ∂g = Tensor{Tuple{4,@Symmetry{4,4}},S}(
-        (σ,μ,ν) -> (σ==1 ? ∂tgs[μ,ν] : σ==2 ? dr[μ,ν] : σ==3 ? dθ[μ,ν] : σ==4 ? 0. : @assert false)
+        (σ,μ,ν) -> (σ==1 ? ∂tgs[μ,ν] : σ==2 ? dx[μ,ν] : σ==3 ? dy[μ,ν] : σ==4 ? 0. : @assert false)
         )
 
     Γ  = Tensor{Tuple{4,@Symmetry{4,4}},S}(
@@ -788,9 +635,11 @@ end
 
     C_ = @einsum gi[ϵ,σ]*Γ[μ,ϵ,σ] - Hxy[μ]
 
+    # println(ρ)
+    # display(C_)
 
-    # Cr = (Dr2(fg,U,r,θ,ns,_ds,x,y) - dr)
-    # Cθ = (Dθ2(fg,U,r,θ,ns,_ds,x,y) - dθ)
+    # Cr = (Dr2(fg,U,r,θ,ns,_ds,x,y) - dx)
+    # Cθ = (Dθ2(fg,U,r,θ,ns,_ds,x,y) - dy)
 
     # C2 = Tensor{Tuple{4,@Symmetry{4,4}},S}((σ,μ,ν) -> (σ==1 ? 0.0 : σ==2 ? Cr[μ,ν] : σ==3 ? Cθ[μ,ν] : σ==4 ? 0. : @assert false))
 
@@ -811,11 +660,9 @@ end
 
     ∂tP = 8*pi*Tt*g - 16*pi*T 
 
-    ∂tP += 2*symmetric(@einsum (μ,ν) -> ∂Hxy[μ,ν])
+    ∂tP += 2*symmetric(∂Hxy)
 
     ∂tP -= 2*symmetric(@einsum (μ,ν) -> gi[ϵ,σ]*Hxy[ϵ]*∂g[μ,ν,σ])
-
-    #∂tP -= @einsum (μ,ν) -> gi[ϵ,σ]*Hxy[ϵ]*∂g[ν,μ,σ]
 
     ∂tP += @einsum (μ,ν) -> 2*gi[ϵ,σ]*gi[λ,ρ]*∂g[λ,ϵ,μ]*∂g[ρ,σ,ν]
 
@@ -832,11 +679,11 @@ end
     ###########################################
     # All finite differencing occurs here
 
-    ∂tP += Div(vr,vθ,U,ns,_ds,x,y) # 
+    ∂tP += Div(vr,vθ,U,r,θ,ns,_ds,x,y)# + vr(U)*
 
-    ∂tdr = symmetric(Dr2(u,U,ns,x,y)*_ds[1]) # + α*γ2*Cr 
+    ∂tdx = symmetric(Dρ2(u,U,r,θ,ns,_ds,x,y)) # + α*γ2*Cr 
 
-    ∂tdθ = symmetric(Dθ2(u,U,ns,x,y)*_ds[2]) # + α*γ2*Cθ
+    ∂tdy = symmetric(Dz2(u,U,r,θ,ns,_ds,x,y)) # + α*γ2*Cθ
 
     #########################################
     ∂tP = symmetric(∂tP)
@@ -938,9 +785,9 @@ end
     
         ∂tβ = α*(@einsum γi[α,μ]*n[ν]*∂tgs[μ,ν]) # result is a 4-vector
     
-        ∂t∂tg = (βr*∂tdr + βθ*∂tdθ - α*∂tP) + (∂tβ[2]*dr + ∂tβ[3]*dθ - ∂tα*P)
+        ∂t∂tg = (βr*∂tdx + βθ*∂tdy - α*∂tP) + (∂tβ[2]*dx + ∂tβ[3]*dy - ∂tα*P)
     
-        ∂t∂g = Tensor{Tuple{4,@Symmetry{4,4}},S}((σ,μ,ν) -> (σ==1 ? ∂t∂tg[μ,ν] : σ==2 ? ∂tdr[μ,ν] : σ==3 ? ∂tdθ[μ,ν] : σ==4 ? 0. : @assert false))
+        ∂t∂g = Tensor{Tuple{4,@Symmetry{4,4}},S}((σ,μ,ν) -> (σ==1 ? ∂t∂tg[μ,ν] : σ==2 ? ∂tdx[μ,ν] : σ==3 ? ∂tdy[μ,ν] : σ==4 ? 0. : @assert false))
     
 
         ∂tΓ  = Tensor{Tuple{4,@Symmetry{4,4}},S}((σ,μ,ν) -> 0.5*(∂t∂g[ν,μ,σ] + ∂t∂g[μ,ν,σ] - ∂t∂g[σ,μ,ν]))   
@@ -962,12 +809,12 @@ end
 
         ∂Cm = F + rhat[1]*∂rC + rhat[2]*∂θC
 
-        #c4rθ = Dr2(fdr,U,r,θ,ns,_ds,x,y) - Dθ2(fdθ,U,r,θ,ns,_ds,x,y)
+        #c4rθ = Dr2(fdx,U,r,θ,ns,_ds,x,y) - Dθ2(fdy,U,r,θ,ns,_ds,x,y)
         #c4θr = -c4rθ
 
-        ∂tUp = ∂tP + rhat[1]*∂tdr + rhat[2]*∂tdθ# - γ2*∂tg   
-        ∂tUm = ∂tP - rhat[1]*∂tdr - rhat[2]*∂tdθ# - γ2*∂tg
-        ∂tU0 = θhat[1]*∂tdr + θhat[2]*∂tdθ
+        ∂tUp = ∂tP + rhat[1]*∂tdx + rhat[2]*∂tdy# - γ2*∂tg   
+        ∂tUm = ∂tP - rhat[1]*∂tdx - rhat[2]*∂tdy# - γ2*∂tg
+        ∂tU0 = θhat[1]*∂tdx + θhat[2]*∂tdy
 
         #∂tU0 = ()∂tdx + ∂tdz
 
@@ -980,17 +827,23 @@ end
 
         # Time derivatives are OVERWRITTEN here, but still depends on evolution values
         ∂tP  = 0.5*(∂tUp + ∂tUmb)
-        ∂tdr = 0.5*(∂tUp - ∂tUmb)*rhat_[1] + ∂tU0b*θhat_[1] 
-        ∂tdθ = 0.5*(∂tUp - ∂tUmb)*rhat_[2] + ∂tU0b*θhat_[2] 
+        ∂tdx = 0.5*(∂tUp - ∂tUmb)*rhat_[1] + ∂tU0b*θhat_[1] 
+        ∂tdy = 0.5*(∂tUp - ∂tUmb)*rhat_[2] + ∂tU0b*θhat_[2] 
 
     end
 
     #############################
 
-    ∂tP = symmetric(∂tP)
+    #∂tP = symmetric(∂tP)
 
-    ∂tU = SphericalStateVector(∂tgs,∂tdr,∂tdθ,∂tP)
+    ∂tU = StateVector(ρ,∂tgs,∂tdx,∂tdy,∂tP)
 
+    # display(∂tU.g)
+    # display(∂tU.dx)
+    # display(∂tU.dy)
+    # display(∂tU.P)
+    
+    #return
     #return 58ns
 
     #display(∂tU.P)
@@ -1001,51 +854,28 @@ end
 
     #display(∂tUc.P)
 
+    # if iter == 1
+    #     U2[x,y] = Uxy + dt*∂tU
+    # elseif iter == 2
+    #     U3[x,y] = (3/4)*U1[x,y] + (1/4)*Uxy + (1/4)*dt*∂tU
+    # elseif iter == 3
+    #     U1[x,y] = (1/3)*U1[x,y] + (2/3)*Uxy + (2/3)*dt*∂tU
+    # end
 
     if iter == 1
-        U2[x,y] = Uxy + dt*∂tU
+        U1t = Uxy
+        Uwxy = U1t + dt*∂tU
     elseif iter == 2
-        U3[x,y] = (3/4)*U1[x,y] + (1/4)*Uxy + (1/4)*dt*∂tU
+        U1t = unpack(U1[x,y])
+        U2t = Uxy
+        Uwxy = (3/4)*U1t + (1/4)*U2t + (1/4)*dt*∂tU
     elseif iter == 3
-        U1[x,y] = (1/3)*U1[x,y] + (2/3)*Uxy + (2/3)*dt*∂tU
+        U1t = unpack(U1[x,y])
+        U2t = Uxy
+        Uwxy = (1/3)*U1t + (2/3)*U2t + (2/3)*dt*∂tU
     end
 
-    # # End bit for SSP RK3
-    # if iter == 1
-
-    #     Uc1     = SphericalToCartesian(Uxy,r,θ)
-
-    #     # 1.5 μs
-
-    #     Uc2     = Uc1 + dt*∂tUc
-
-    #     # 1.5 μs
-
-    #     U2[x,y] = CartesianToSpherical(Uc2,r,θ)
-
-    #     #return 2μs
-
-    # elseif iter == 2
-
-    #     Us1 = U1[x,y]
-    #     Uc1     = SphericalToCartesian(Us1,r,θ)
-    #     Uc2     = SphericalToCartesian(Uxy,r,θ)
-
-    #     Uc3     = (3/4)*Uc1 + (1/4)*Uc2 + (1/4)*dt*∂tUc
-
-    #     U3[x,y] = CartesianToSpherical(Uc3,r,θ)
-
-    # elseif iter == 3
-
-    #     Us1 = U1[x,y]
-    #     Uc1     = SphericalToCartesian(Us1,r,θ)
-    #     Uc3     = SphericalToCartesian(Uxy,r,θ)
-
-    #     Uc1     = (1/3)*Uc1 + (2/3)*Uc3 + (2/3)*dt*∂tUc
-
-    #     U1[x,y] = CartesianToSpherical(Uc1,r,θ)
-
-    # end
+    Uw[x,y] = pack(Uwxy)
 
     return
     
@@ -1140,15 +970,14 @@ end
 function sample!(f, g, ∂g, ns, r, θ, T)
 
     for x in 1:ns[1], y in 1:ns[2]
-        Us = SphericalStateVector{T}(
+        Us = StateVector{T}(r[x,y]*sin(θ[x,y]),
         StateTensor{T}((μ,ν) ->  g(r[x,y],θ[x,y]  ,μ,ν)),
         StateTensor{T}((μ,ν) -> ∂g(r[x,y],θ[x,y],2,μ,ν)),
         StateTensor{T}((μ,ν) -> ∂g(r[x,y],θ[x,y],3,μ,ν)),
         P_init(g,∂g,r,θ,x,y)
         )
 
-        f[x,y] = Us
-        #SphericalToCartesian(Us,r[x,y],θ[x,y])
+        f[x,y] = pack(Us)
     end
 
 end
@@ -1160,14 +989,14 @@ function main()
 
     T = Data.Number
 
-
+    # domains
+    θmin, θmax = 0.0, pi
     rmin, rmax = 5.0, 10.0 
     tmin, tmax = 0.0, 50.
 
-
     numvar=4*7
 
-    t         = 0.0      # physical time
+    t = 0.0      # physical time
     # Numerics
     #scale = 20 # normal amount to test with
     scale = 1
@@ -1178,23 +1007,20 @@ function main()
     ns = (nr,nθ)
 
     # Derived numerics
-    dr = (rmax-rmin)/(nr-1)
-    dθ = pi/(nθ) # cell size for straddled axis, no cells at θ = 0,π
+    dx = (rmax-rmin)/(nr-1)
+    #dy = (θmax-θmin)/(nθ-1) # cell size for included axis
+    dy = pi/(nθ) # cell size for straddled axis, no cells at θ = 0,π
 
-    # domains
-    θmin, θmax = 10*dθ, pi- 10*dθ
+    _dx, _dy   = 1.0/dx, 1.0/dy
+    _ds = (_dx,_dy)
 
-    #dθ = (θmax-θmin)/(nθ-1) # cell size for included axis
-    _dr, _dθ   = 1.0/dr, 1.0/dθ
-    _ds = (_dr,_dθ)
-
-    dt        = min(dr,rmin*dθ)/4.1
+    dt        = min(dx,rmin*dy)/4.1
 
     #dts = (dt,dt/2,dt/3,dt/6)
-    #dt       = min(dr,rmin*dθ)/4.0 #CFL
+    #dt       = min(dx,rmin*dy)/4.0 #CFL
 
     #nt = (tmax-tmin)/dt+1
-    nt = 100
+
 
     #nsave = Int(ceil(nt/nout))
     #nt=10
@@ -1204,13 +1030,13 @@ function main()
     r  = @zeros(nr,nθ)
     θ  = @zeros(nr,nθ)
 
-    r .= Data.Array([rmin + dr*(i-1) for i in 1:nr, j in 1:nθ])
-    #θ .= Data.Array([θmin + dθ*(j-1) for i in 1:nr, j in 1:nθ])
+    r .= Data.Array([rmin + dx*(i-1) for i in 1:nr, j in 1:nθ])
+    #θ .= Data.Array([θmin + dy*(j-1) for i in 1:nr, j in 1:nθ])
+    θ .= Data.Array([dy/2 + dy*(j-1) for i in 1:nr, j in 1:nθ])
 
     # xx .= Data.Array([r[i,j]*sin(θ[i,j]) for i in 1:nr, j in 1:nθ])
     # zz .= Data.Array([r[i,j]*cos(θ[i,j]) for i in 1:nr, j in 1:nθ])
 
-    θ .= Data.Array([dθ/2 + dθ*(j-1) for i in 1:nr, j in 1:nθ])
 
     #return [r[100,2],θ[100,2]]
 
@@ -1219,13 +1045,13 @@ function main()
     # k     = ArrayPartition([@zeros(nr,nθ) for i in 1:numvar]...)
     # ∂tU   = ArrayPartition([@zeros(nr,nθ) for i in 1:numvar]...)
 
-    A  = StructArray{SphericalStateVector{T}}(undef,nr,nθ)
-    B  = StructArray{SphericalStateVector{T}}(undef,nr,nθ)
-    C  = StructArray{SphericalStateVector{T}}(undef,nr,nθ)
+    A  = StructArray{StateVector{T}}(undef,nr,nθ)
+    B  = StructArray{StateVector{T}}(undef,nr,nθ)
+    C  = StructArray{StateVector{T}}(undef,nr,nθ)
 
-    # A  = StructArray{SphericalStateVector{T}}(undef,nr,nθ)
-    # B  = StructArray{SphericalStateVector{T}}(undef,nr,nθ)
-    # C  = StructArray{SphericalStateVector{T}}(undef,nr,nθ)
+    # A  = StructArray{StateVector{T}}(undef,nr,nθ)
+    # B  = StructArray{StateVector{T}}(undef,nr,nθ)
+    # C  = StructArray{StateVector{T}}(undef,nr,nθ)
 
     # Hm     = ArrayPartition([@zeros(nr,nθ) for i in 1:(nd-1)]...)
     # ∂Hm    = ArrayPartition([@zeros(nr,nθ) for i in 1:(3*nd-1)]...)
@@ -1237,18 +1063,24 @@ function main()
 
     # Define initial conditions
 
-    M = 1
-    sign = 1.
+    M = 1.
+    #sign = 1.
 
     # @inline e(r,θ,μ,ν) =  ((      1.      ,      0.     , 0.  ,        0.      ),
     #                        (      0.      ,      1.     , 0.  ,        0.      ),
     #                        (      0.      ,      0.     , r   ,        0.      ),
     #                        (      0.      ,      0.     , 0.  ,     r*sin(θ)   ))[μ][ν]
      
-    @inline g_init(r,θ,μ,ν) =  (( -(1 - 2*M/r) , sign*2*M/r  , 0.  ,        0.        ),
-                                (  sign*2*M/r  , (1 + 2*M/r) , 0.  ,        0.        ),
-                                (      0.      ,      0.     , r^2 ,        0.        ),
-                                (      0.      ,      0.     , 0.  ,    r^2*sin(θ)^2  ))[μ][ν]
+    # @inline g_init(r,θ,μ,ν) =  (( -(1 - 2*M/r) , sign*2*M/r  , 0.  ,        0.        ),
+    #                             (  sign*2*M/r  , (1 + 2*M/r) , 0.  ,        0.        ),
+    #                             (      0.      ,      0.     , r^2 ,        0.        ),
+    #                             (      0.      ,      0.     , 0.  ,    r^2*sin(θ)^2  ))[μ][ν]
+
+
+    @inline g_init(r,θ,μ,ν) =  (( -(1 - 2*M/r)  ,     2*M*sin(θ)/r    ,    2*M*cos(θ)/r     , 0.           ),
+                                (  2*M*sin(θ)/r , 1 + M*(1-cos(2θ))/r ,     M*sin(2θ)/r     , 0.           ),
+                                (  2*M*cos(θ)/r ,      M*sin(2θ)/r    , 1 + M*(1+cos(2θ))/r , 0.           ),
+                                (        0.     ,          0.         ,         0.          , r^2*sin(θ)^2 ))[μ][ν]
 
     # Fully Harmonic
     #@inline ϵ(r) = (2*M)/(r*(1+M/r))
@@ -1275,8 +1107,11 @@ function main()
 
     @inline ∂rg(r,θ,μ,ν) = ForwardDiff.derivative(r -> g_init(r,θ,μ,ν), r)
     @inline ∂θg(r,θ,μ,ν) = ForwardDiff.derivative(θ -> g_init(r,θ,μ,ν), θ)
+
+    @inline ∂ρg(r,θ,μ,ν) = ∂rg(r,θ,μ,ν)*sin(θ) + ∂θg(r,θ,μ,ν)*cos(θ)/r
+    @inline ∂zg(r,θ,μ,ν) = ∂rg(r,θ,μ,ν)*cos(θ) - ∂θg(r,θ,μ,ν)*sin(θ)/r
     
-    @inline ∂g_init(r,θ,σ,μ,ν) = (∂tg_init(r,θ,μ,ν),∂rg(r,θ,μ,ν),∂θg(r,θ,μ,ν),0.0)[σ]
+    @inline ∂g_init(r,θ,σ,μ,ν) = (∂tg_init(r,θ,μ,ν),∂ρg(r,θ,μ,ν),∂zg(r,θ,μ,ν),0.0)[σ]
                                    
     # @inline P_init(r,θ,μ,ν) = -(∂ₜg_init(r,θ,μ,ν) - β(r,θ,2)*d_init(r,θ,2,μ,ν) - β(r,θ,3)*d_init(r,θ,3,μ,ν))/α(r,θ)
 
@@ -1308,12 +1143,12 @@ function main()
     #                         (0.,0.,0.,0.)[ν],
     #                         (ForwardDiff.derivative(z -> fHt(x,z), z),0.0,0.0,0.0)[ν])[μ]
 
-    @inline fH_(r,θ,μ) = (-2*M/r^2,-2*(M+r)/r^2,-cos(θ)/sin(θ),0.)[μ] # lower index
+    @inline fH_(r,θ,μ) = (0.,-1/r/sin(θ),0.,0.)[μ] # lower index
 
     @inline f∂H_(r,θ,μ,ν) = ((0.,0.,0.,0.)[ν],
-                            ForwardDiff.derivative(r -> fH_(r,θ,ν), r),
-                            ForwardDiff.derivative(θ -> fH_(r,θ,ν), θ),
-                            (0.,0.,0.,0.)[ν])[μ]
+                             (0.,1/(r^2*sin(θ)^2),0.,0.)[ν],
+                             (0.,0.,0.,0.)[ν],
+                             (0.,0.,0.,0.)[ν])[μ]
 
     #@inline f∂H_sym(r,θ,μ,ν) = 0.5*(∂H(r,θ,μ,ν)+∂H(r,θ,ν,μ))
 
@@ -1322,7 +1157,7 @@ function main()
     B .= A
     C .= A
 
-    #return (A[1,1].dθ)[4,4] - 2*r[1,1]^2*sin(θ[1,1])*cos(θ[1,1])
+    #return (A[1,1].dy)[4,4] - 2*r[1,1]^2*sin(θ[1,1])*cos(θ[1,1])
 
     for i in 1:ns[1], j in 1:ns[2]
         #Λ = StateTensor([e(r,θ,μ,ν)])
@@ -1330,13 +1165,21 @@ function main()
         ∂H[i,j] = SecondOrderTensor{4,T,16}((μ,ν) -> f∂H_(r[i,j],θ[i,j],μ,ν))
     end
 
-    # x=75;y=75;
+    x=50;y=50;
 
+    #rhs!(T,A,B,C,H,∂H,r,θ,ns,dt,_ds,1,x,y)
+
+    #return
     # display(A[x,y].g)
     # display(A[x,y].dx)
     # display(A[x,y].dy)
     # display(A[x,y].dz)
     # display(A[x,y].P)
+    # println(r[x,y]*sin(θ[x,y]))
+
+    # test = pack(unpack(A[x,y]))
+
+    # display(A[x,y].P-test.P)
 
     # return
     #return rhs!(A,B,C,H,∂H,r,θ,ns,dt,_ds,1)
@@ -1367,8 +1210,8 @@ function main()
     # Us = CartesianToSpherical(Uc,r[75,75],θ[75,75])
 
     # display(Us.g - Ui.g)
-    # display(Us.dr - Ui.dr)
-    # display(Us.dθ - Ui.dθ)
+    # display(Us.dx - Ui.dx)
+    # display(Us.dy - Ui.dy)
     # display(Us.P - Ui.P)
 
     #return 
@@ -1388,6 +1231,7 @@ function main()
 
     temp_array = getindex.(A.P,μi,νi)
 
+    nt = 10
     nout = 1 #round(nt/100)          # plotting frequency
 
     ENV["GKSwstype"]="nul";
@@ -1425,7 +1269,7 @@ function main()
 
             # r slice
             #data = [constraints(x,50,A)- H[x,50] for x in 1:nr]
-            #data = [ [getindex(Dx2(fg,A,r,θ,ns,_ds,x,50) - A[x,50].dr,1,i) for i in 1:4] for x in 1:nr]
+            #data = [ [getindex(Dx2(fg,A,r,θ,ns,_ds,x,50) - A[x,50].dx,1,i) for i in 1:4] for x in 1:nr]
 
             # θ slice
             data = [constraints(A[50,y]) - H[50,y] for y in 1:nθ]
@@ -1512,7 +1356,7 @@ function main()
 
     #return @benchmark @parallel (1:$nr,1:$nθ) RK4!($Un,$Un1,$H,$∂H_sym,$r,$θ,$ns,$dt,$_ds)
 
-    #@parallel rhs!(∂ₜU,U,r,θ,ql,qr,dt,dr,dθ)
+    #@parallel rhs!(∂ₜU,U,r,θ,ql,qr,dt,dx,dy)
 
     #return @macroexpand @part (1,2) (φ + α)
 
@@ -1526,7 +1370,7 @@ function main()
     # file = h5open(path*"/file.h5","cw")
     # close(file)
 
-    # R, Θ      = rmin:dr:rmax, dθ:dθ:pi
+    # R, Θ      = rmin:dx:rmax, dy:dy:pi
 
 
     #Preparation of visualisation
@@ -1568,19 +1412,19 @@ function main()
 
     for it = 1:nt
         #if (it==11)  global wtime0 = Base.time()  end
-        # @parallel compute_V!(P,Vr,Vθ,r,θ,ql,qr,dt,dr,dθ)
-        # @parallel compute_P!(P,Vr,Vθ,r,θ,ql,qr,dt,dr,dθ)
+        # @parallel compute_V!(P,Vr,Vθ,r,θ,ql,qr,dt,dx,dy)
+        # @parallel compute_P!(P,Vr,Vθ,r,θ,ql,qr,dt,dx,dy)
 
-        # @parallel (1:nr,1:nθ)  rhs!(k,U,metric,t,r,θ,ql,qr,dt,dr,dθ,nr,nθ) #Calculate right hand side and store it in k
-        # @parallel (1:nr)       BCθ!(k,U,metric,dθ)
-        # @parallel (1:nθ)       BCr!(k,U,metric,t,rmax,θ[1,:],dr)
+        # @parallel (1:nr,1:nθ)  rhs!(k,U,metric,t,r,θ,ql,qr,dt,dx,dy,nr,nθ) #Calculate right hand side and store it in k
+        # @parallel (1:nr)       BCθ!(k,U,metric,dy)
+        # @parallel (1:nθ)       BCr!(k,U,metric,t,rmax,θ[1,:],dx)
         # @parallel (1:nr,1:nθ)  lincomb!(k,U,k,1.,dt/2)
-        # @parallel (1:nr,1:nθ)  rhs!(∂ₜU,k,metric,t+dt/2,r,θ,ql,qr,dt,dr,dθ,nr,nθ) #Calculate right hand side and store it in ∂ₜU
-        # @parallel (1:nr)       BCθ!(∂ₜU,k,metric,dθ)
-        # @parallel (1:nθ)       BCr!(∂ₜU,k,metric,t+dt/2,rmax,θ[1,:],dr)
+        # @parallel (1:nr,1:nθ)  rhs!(∂ₜU,k,metric,t+dt/2,r,θ,ql,qr,dt,dx,dy,nr,nθ) #Calculate right hand side and store it in ∂ₜU
+        # @parallel (1:nr)       BCθ!(∂ₜU,k,metric,dy)
+        # @parallel (1:nθ)       BCr!(∂ₜU,k,metric,t+dt/2,rmax,θ[1,:],dx)
         # @parallel (1:nr,1:nθ)  lincomb!(U,U,∂ₜU,1.,dt)
 
-        #rhs!(∂ₜU,U,gauge,rm,θm,nr,nθ,_dr,_dθ)
+        #rhs!(∂ₜU,U,gauge,rm,θm,nr,nθ,_dx,_dy)
         # res=1;
         # plot(Array(θ[2,1:res:end]), Array(U.x[11][2,1:res:end])); 
         # ylims!(1.5, 1.8)
@@ -1611,9 +1455,9 @@ function main()
         # frame(anim)
         # if rand(1:Int(round(nt/10)))==1
         #     x,y = rand(rmin+2:rmax-2), rand(θmin+2:θmax-2)
-        #     φ  .+= Data.Array([f(r,θ,x,y)  for r=rmin:dr:rmax, θ=θmin:dθ:θmax])
-        #     ψr .+= Data.Array([fr(r,θ,x,y) for r=rmin:dr:rmax, θ=θmin:dθ:θmax])
-        #     ψθ .+= Data.Array([fθ(r,θ,x,y) for r=rmin:dr:rmax, θ=θmin:dθ:θmax])
+        #     φ  .+= Data.Array([f(r,θ,x,y)  for r=rmin:dx:rmax, θ=θmin:dy:θmax])
+        #     ψr .+= Data.Array([fr(r,θ,x,y) for r=rmin:dx:rmax, θ=θmin:dy:θmax])
+        #     ψθ .+= Data.Array([fθ(r,θ,x,y) for r=rmin:dx:rmax, θ=θmin:dy:θmax])
         # end
 
         t = t + dt

@@ -1,3 +1,274 @@
+       
+    # enforce axis regularity strongly
+    if (y==1 || y==ns[2]) && false
+
+        ψv = Uwxy.ψ
+        g  = Uwxy.g 
+        dx = Uwxy.dr   
+        dy = Uwxy.dθ  
+        P  = Uwxy.P 
+
+        ψ,ψx,ψy,Ψ = ψv
+
+        # Calculate inverse metric components
+        gi = inv(g)
+
+        # Calculate lapse and shift
+        α  = 1/sqrt(-gi[1,1])
+        βx = -gi[1,2]/gi[1,1]
+        βy = -gi[1,3]/gi[1,1]
+
+        # Time derivatives of the metric
+        ∂tg = βx*dx + βy*dy - α*P
+        ∂tψ = βx*ψx + βy*ψy - α*Ψ
+
+        # f   = (exp(4*ψ)+g[2,2])/exp(2*ψ)/2
+        # ∂zf = (2*(exp(4*ψ)-g[2,2])*ψy  + dy[2,2] )/exp(2*ψ)/2
+        # ∂tf = (2*(exp(4*ψ)-g[2,2])*∂tψ + ∂tg[2,2])/exp(2*ψ)/2
+
+        # gρρ   = f^2
+        # ∂ρgρρ = 0.
+        # ∂zgρρ = 2*f*∂zf
+        # ∂tgρρ = 2*f*∂tf
+
+        # # gρρ   = exp(4*ψ)
+        # # ∂ρgρρ = 0.
+        # # ∂zgρρ = 4*gρρ*ψy
+        # # ∂tgρρ = 4*gρρ*∂tψ
+
+        # ψ   = log(f)/2
+        # ψx  = 0.
+        # ψy  = ∂zf/f/2
+        # ∂tψ = ∂tf/f/2
+
+        g   = StateTensor{Type}((g[1,1],0.,g[1,3],0.,0.,g[3,3]))
+        dx  = StateTensor{Type}((0.,dx[1,2],0.,0.,dx[2,3],0.))
+        dy  = StateTensor{Type}((dy[1,1],0.,dy[1,3],0.,0.,dy[3,3]))
+        ∂tg = StateTensor{Type}((∂tg[1,1],0.,∂tg[1,3],0.,0.,∂tg[3,3]))
+
+        Ψ = -(∂tψ - βy*ψy)/α 
+        P = -(∂tg - βy*dy)/α
+
+        ψv = (ψ,0.,ψy,Ψ)
+
+        Uwxy = StateVector{Type}(0.,ψv,g,dx,dy,P)
+
+        Uw[x,y] = Uwxy
+
+    else
+        
+    end
+
+
+ρ = U[x,y].ρ
+           # ψv = U.ψ
+           # g  = U.g 
+           # dr = U.dr 
+           # dθ = U.dθ
+           # P  = U.P 
+       
+           # ψ,ψr,ψθ,Ψ = ψv.data
+       
+           # ∂ψ = @Vec [∂ψ,∂ψr,∂ψθ,∂Ψ]
+       
+           # A = StateVector{T}((∂ψ,∂g,∂dr,∂dθ,∂P))
+           nx,ny = ns
+           ϵ = 2.
+           if x in 2:nx-1 && y in 2:ny-1 
+               Ud = (ϵ/4)*(U[x-1,y] + U[x+1,y] - 4*U[x,y] + U[x,y-1] + U[x,y+1])
+           elseif x==1 && y ≠ 1 && y ≠ ny
+               Ud = (ϵ/4)*(2*U[2,y] - 4*U[1,y] + U[1,y-1] + U[1,y+1])
+           elseif x==nx && y ≠ 1 && y ≠ ny
+               Ud = (ϵ/4)*(2*U[nx-1,y] - 4*U[nx,y] + U[nx,y-1] + U[nx,y+1])
+           elseif y == 1 && x ≠ nx && x ≠ 1
+               Ud = (ϵ/4)*(U[x-1,1] + U[x+1,1] - 4*U[x,1] + StateVectorParity*U[x,2] + U[x,2])
+           elseif y == ny && x ≠ nx && x ≠ 1
+               Ud = (ϵ/4)*(U[x-1,ny] + U[x+1,ny] - 4*U[x,ny] + StateVectorParity*U[x,ny-1] + U[x,ny-1])
+           elseif x==1 && y==1
+               Ud = (ϵ/4)*(2*U[2,1] - 4*U[1,1] + StateVectorParity*U[1,2] + U[1,2])
+           elseif x==nx && y==1
+               Ud = (ϵ/4)*(2*U[nx-1,1] - 4*U[nx,1] + StateVectorParity*U[nx,2] + U[nx,2])
+           elseif x==1 && y==ny
+               Ud = (ϵ/4)*(2*U[2,ny] - 4*U[1,ny] + StateVectorParity*U[1,ny-1] + U[1,ny-1])
+           elseif x==nx && y==ny
+               Ud = (ϵ/4)*(2*U[nx-1,ny] - 4*U[nx,ny] + StateVectorParity*U[nx,ny-1] + U[nx,ny-1])
+           else
+               Ud = zero(StateVector{Data.Number},ρ)
+           end
+       
+           return StateVector{Data.Number}(ρ,Ud.ψ,Ud.g,Ud.dr,Ud.dθ,Ud.P)
+           # nx,ny = ns
+    # if x in 2:nx-1 && y in 2:ny-1
+    #     0.25*(f(U,x,y-1) + f(U,x,y+1) + f(U,x-1,y) + f(U,x+1,y))
+    # elseif x==1 && y in 2:ny-1
+    #     0.25*(f(U,x,y-1) + f(U,x,y+1)) + 0.5*f(U,x+1,y)
+    # elseif x==nx && y in 2:ny-1
+    #     0.25*(f(U,x,y-1) + f(U,x,y+1)) + 0.5*f(U,x-1,y)
+    # elseif x in 2:nx-1 && y == 1
+    #     0.5*f(U,x,y+1) + 0.25*(f(U,x-1,y+1) + f(U,x+1,y+1))
+    # elseif x in 2:nx-1 && y == ny
+    #     0.5*f(U,x,y-1) + 0.25*(f(U,x-1,y-1) + f(U,x+1,y-1))
+    # elseif x==1 && y==1
+    #     0.5*(f(U,x,y+1) + f(U,x+1,y+1))
+    # elseif x==nx && y==1
+    #     0.5*(f(U,x,y+1) + f(U,x-1,y+1))
+    # elseif x==1 && y==ny
+    #     0.5*(f(U,x,y-1) + f(U,x+1,y-1))
+    # elseif x==nx && y==ny
+    #     0.5*(f(U,x,y-1) + f(U,x-1,y-1))
+    # end
+    #     @assert false
+    # end
+       
+       # ∂tα = -0.5*α*(@einsum n[μ]*n[ν]*∂tg[μ,ν])
+    
+        # ∂tβ = α*(@einsum γi[α,μ]*n[ν]*∂tg[μ,ν]) # result is a 3-vector
+    
+        # ∂t∂tg = (βr*∂tdr + βθ*∂tdθ - α*∂tP) + (∂tβ[2]*dr + ∂tβ[3]*dθ - ∂tα*P)
+    
+        # ∂t∂g = Symmetric3rdOrderTensor{Type}((σ,μ,ν) -> (σ==1 ? ∂t∂tg[μ,ν] : σ==2 ? ∂tdr[μ,ν] : σ==3 ? ∂tdθ[μ,ν] : @assert false))
+    
+        # ∂tΓ  = Symmetric3rdOrderTensor{Type}((σ,μ,ν) -> 0.5*(∂t∂g[ν,μ,σ] + ∂t∂g[μ,ν,σ] - ∂t∂g[σ,μ,ν]))   
+
+        # ∂tH = Vec{3}((∂Hxy[1,:]...))
+        # ∂rH = Vec{3}((∂Hxy[2,:]...))
+        # ∂θH = Vec{3}((∂Hxy[3,:]...))
+    
+        # ∂tC = (@einsum gi[ϵ,σ]*∂tΓ[λ,ϵ,σ]) - (@einsum gi[μ,ϵ]*gi[ν,σ]*Γ[λ,μ,ν]*∂tg[ϵ,σ]) - ∂tH
+    
+        # # set up finite differencing for the constraints, by defining a function
+        # # that calculates the constraints for any x and y index. This
+        # # might not be the best idea, but should work.
+
+        # ∂rC = DρC(constraints,U,r,θ,ns,_ds,x,y)*_ds[1] - ∂rH # + 0.5*γ2*(@einsum (n_[σ]*gi[μ,ν]*Cr[μ,ν] - n[ν]*Cr[σ,ν]))
+        # ∂θC = DzC(constraints,U,r,θ,ns,_ds,x,y)*_ds[2] - ∂θH # + 0.5*γ2*(@einsum (n_[σ]*gi[μ,ν]*Cθ[μ,ν] - n[ν]*Cθ[σ,ν]))
+    
+        # F = (∂tC - βr*∂rC - βθ*∂θC)/α # + γ2*(@einsum γi[μ,ν]*C2[μ,ν,λ] - 0.5*γp[λ,σ]*gi[μ,ν]*C2[σ,μ,ν])
+
+        # ∂Cm = F + rhat[1]*∂rC + rhat[2]*∂θC
+
+        # #c4rθ = Dr2(fdr,U,r,θ,ns,_ds,x,y) - Dθ2(fdθ,U,r,θ,ns,_ds,x,y)
+        # #c4θr = -c4rθ
+
+        # ∂tUp = ∂tP + rhat[1]*∂tdr + rhat[2]*∂tdθ# - γ2*∂tg   
+        # ∂tUm = ∂tP - rhat[1]*∂tdr - rhat[2]*∂tdθ# - γ2*∂tg
+        # ∂tU0 = θhat[1]*∂tdr + θhat[2]*∂tdθ
+
+        # #∂tU0 = ()∂tdx + ∂tdz
+
+        # ∂tUmb = @einsum Q4[μ,ν,α,β]*∂tUm[α,β]
+        # ∂tUmb -= sqrt(2)*cm*(@einsum Q3[α,μ,ν]*∂Cm[α]) # Constraint preserving BCs
+
+        # ∂tU0b = ∂tU0# + c0*(rhat[1]*θhat[2]*c4θr + rhat[2]*θhat[1]*c4rθ)
+
+        # #∂tUmb = @einsum O[μ,ν,α,β]*∂th[α,β] # Incoming Gravitational waveform
+
+        # # Time derivatives are OVERWRITTEN here, but still depends on evolution values
+        # ∂tP  = 0.5*(∂tUp + ∂tUmb)
+        # ∂tdr = 0.5*(∂tUp - ∂tUmb)*rhat_[1] + ∂tU0b*θhat_[1] 
+        # ∂tdθ = 0.5*(∂tUp - ∂tUmb)*rhat_[2] + ∂tU0b*θhat_[2] 
+
+
+#Axis regularity, acts as a generic boundary
+if (y==1 || y==ns[2]) && false
+
+    if y==1 p=-1 else p=1 end
+
+    rhat_ = @Vec [0.,-p]
+
+    rnorm = @einsum γi2[i,j]*rhat_[i]*rhat_[j]
+
+    rhat_ = rhat_/sqrt(rnorm)
+
+    rhat = @einsum γi2[i,j]*rhat_[j]
+
+    # It is now θhat that points OUT of the domain
+    θhat = @Vec [-1.,0.]
+
+    θnorm = @einsum γ[i,j]*θhat[i]*θhat[j]
+
+    θhat = θhat/sqrt(θnorm)
+
+    θhat_ = @einsum γ[i,j]*θhat[j]
+
+    cp =  α - βr*θhat_[1] - βθ*θhat_[2]
+    cm = -α - βr*θhat_[1] - βθ*θhat_[2]
+    c0 =    - βr*θhat_[1] - βθ*θhat_[2]
+
+    βdotr = βr*rhat_[1] + βθ*rhat_[2]
+
+    Up = P + θhat[1]*dr + θhat[2]*dθ
+    U0 = rhat[1]*dr + rhat[2]*dθ
+
+    Dt = StateTensor{Type}((0.,1.,0.,1.,1.,0.))
+    Dρ = StateTensor{Type}((1.,0.,1.,0.,0.,1.))
+
+    # Condition ∂tgμν = 0 on the boundary
+    Umbt = (cp/cm)*Up - 2*(βdotr/cm)*U0
+
+    # Condition ∂ρgμν = 0 on the boundary
+    Umbρ = Up
+
+    #Umb = Dt.*Umbt + Dρ.*Umbρ
+    Umb = Umbt
+
+    #SAT type boundary conditions
+
+    ε = 2*abs(cm)*_ds[2]
+
+    Pb  = 0.5*(Up + Umb)
+    drb = 0.5*(Up - Umb)*θhat_[1] + U0*rhat_[1] 
+    dθb = 0.5*(Up - Umb)*θhat_[2] + U0*rhat_[2] 
+
+    ∂tP  += ε*(Pb - P)
+    ∂tdr += ε*(drb - dr)
+    ∂tdθ += ε*(dθb - dθ)
+    
+end
+@inline function pack(U::StateVector{Type},∂tU::StateVector{Type}) where Type
+
+    # Give names to stored arrays from the state vector
+    g  = U.g 
+    dx = U.dr   
+    dy = U.dθ  
+    P  = U.P 
+
+    ∂tψv = ∂tU.ψ
+    ∂tg  = ∂tU.g 
+    ∂tdx = ∂tU.dr   
+    ∂tdy = ∂tU.dθ  
+    ∂tP  = ∂tU.P 
+
+    χ     =    g[2,2]
+    ∂xχ   =   dx[2,2]
+    ∂yχ   =   dy[2,2]
+    ∂nχ   =    P[2,2]
+
+    gρρ   = exp(2*χ)
+    ∂xgρρ = 2*gρρ*∂xχ
+    ∂ygρρ = 2*gρρ*∂yχ
+    Pρρ   = 2*gρρ*∂nχ
+
+    ∂tgρρ  =  ∂tg[2,2]
+    ∂tdxρρ = ∂tdx[2,2]
+    ∂tdyρρ = ∂tdy[2,2]
+    ∂tPρρ  =  ∂tP[2,2]
+
+    #χ    = 0.5*log(gρρ)
+    ∂tχ   = 0.5*∂tgρρ/gρρ
+    ∂t∂xχ = 0.5*∂tdxρρ/gρρ - 0.5*∂tgρρ*∂xgρρ/gρρ^2
+    ∂t∂yχ = 0.5*∂tdyρρ/gρρ - 0.5*∂tgρρ*∂ygρρ/gρρ^2
+    ∂t∂nχ = 0.5*∂tPρρ/gρρ  -  0.5*∂tgρρ*Pρρ/gρρ^2
+
+    # Rescale the ρρ component of the metric to make it the literal metric
+    ∂tg  = replace_comp(∂tg,∂tχ)
+    ∂tdx = replace_comp(∂tdx,∂t∂xχ)
+    ∂tdy = replace_comp(∂tdy,∂t∂yχ)
+    ∂tP  = replace_comp(∂tP,∂t∂nχ)
+
+    return StateVector{Type}(∂tψv,∂tg,∂tdx,∂tdy,∂tP)
+
+end
 
     # if iter == 1
     #     U2[x,y] = Uxy + dt*∂tU
